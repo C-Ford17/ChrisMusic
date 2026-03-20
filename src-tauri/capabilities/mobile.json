@@ -1,0 +1,21 @@
+{
+    "$schema": "../gen/schemas/mobile-schema.json",
+    "identifier": "mobile-default",
+    "description": "Mobile capability",
+    "platforms": [
+        "android",
+        "iOS"
+    ],
+    "windows": [
+        "main"
+    ],
+    "permissions": [
+        "core:default",
+        "core:path:default",
+        "fs:default",
+        "fs:allow-appdata-read-recursive",
+        "fs:allow-appdata-write-recursive",
+        "http:default",
+        "http:allow-fetch"
+    ]
+}

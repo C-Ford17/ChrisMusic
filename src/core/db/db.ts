@@ -37,7 +37,7 @@ export interface PlaylistEntry {
 
 export interface LyricsRecord {
   id: string; // YouTube Video ID
-  data: any; // The full LyricsData from the API
+  data: unknown; // The full LyricsData from the API
   updatedAt: number;
 }
 
@@ -49,8 +49,17 @@ export interface SearchHistory {
 export interface OfflineSong {
   id: string; // YouTube Video ID
   song: LocalSong;
-  audioBlob: Blob; // The actual audio data
+  audioBlob?: Blob; // Optional for Web (PWA)
+  filePath?: string; // Optional for Native (Tauri)
   downloadedAt: number;
+}
+
+export interface CachedSong {
+  id: string; // YouTube Video ID
+  song: LocalSong;
+  audioBlob?: Blob; // Added for Web/Capacitor
+  filePath?: string; // Optional for Native (Tauri)
+  cachedAt: number;
 }
 
 export class ChrisMusicDB extends Dexie {
@@ -61,6 +70,7 @@ export class ChrisMusicDB extends Dexie {
   lyrics!: EntityTable<LyricsRecord, 'id'>;
   searchHistory!: EntityTable<SearchHistory, 'query'>;
   offlineSongs!: EntityTable<OfflineSong, 'id'>;
+  cachedSongs!: EntityTable<CachedSong, 'id'>;
 
   constructor() {
     super('ChrisMusicDB');
@@ -86,6 +96,16 @@ export class ChrisMusicDB extends Dexie {
     // Version 4: Offline songs
     this.version(4).stores({
       offlineSongs: 'id, downloadedAt'
+    });
+
+    // Version 5: Added filePath for native storage
+    this.version(5).stores({
+      offlineSongs: 'id, downloadedAt'
+    });
+
+    // Version 6: Cached songs
+    this.version(6).stores({
+      cachedSongs: 'id, cachedAt'
     });
   }
 }

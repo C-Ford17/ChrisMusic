@@ -84,7 +84,7 @@ export function PlayerOverlay() {
             initial={{ y: 100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 100, opacity: 0 }}
-            className="fixed bottom-16 left-2 right-2 sm:bottom-0 sm:left-0 sm:right-0 sm:w-full sm:rounded-none sm:h-24 bg-white/95 dark:bg-[#181818]/95 sm:bg-white sm:dark:bg-[#181818] backdrop-blur-xl border border-black/5 dark:border-white/10 sm:border-x-0 sm:border-b-0 rounded-2xl p-2 sm:px-6 flex items-center shadow-2xl sm:shadow-none z-50 cursor-pointer overflow-hidden transition-colors duration-300"
+            className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] left-2 right-2 sm:bottom-0 sm:left-0 sm:right-0 sm:w-full sm:rounded-none sm:h-24 bg-white/95 dark:bg-[#181818]/95 sm:bg-white sm:dark:bg-[#181818] backdrop-blur-xl border border-black/5 dark:border-white/10 sm:border-x-0 sm:border-b-0 rounded-2xl p-2 sm:px-6 flex items-center shadow-2xl sm:shadow-none z-50 cursor-pointer overflow-hidden transition-colors duration-300"
             onClick={() => setIsNowPlayingOpen(true)}
           >
             {/* Mobile Background Progress Bar */}
@@ -340,7 +340,7 @@ export function PlayerOverlay() {
                     <button onClick={togglePlayPause} className="w-20 h-20 bg-black dark:bg-white text-white dark:text-black rounded-full flex items-center justify-center shadow-xl">{isPlaying ? <Pause size={36} fill="currentColor" /> : <Play size={36} fill="currentColor" className="ml-1" />}</button>
                     <button onClick={playNext} className="text-black dark:text-white"><SkipForward size={40} fill="currentColor" /></button>
                   </div>
-                  <div className="flex justify-between items-center px-4 mt-4">
+                  <div className="flex justify-between items-center px-4 mt-4 pb-safe">
                     <button onClick={toggleShuffle} className={`p-2 transition-all ${isShuffle ? 'text-[#7C3AED]' : 'text-black/20 dark:text-white/40'}`}><Shuffle size={24} /></button>
                     <div className="flex items-center gap-8">
                       <VolumeControl />

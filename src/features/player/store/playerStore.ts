@@ -23,16 +23,16 @@ interface PlayerState {
   lyrics: LyricsLine[] | null;
   isLyricsLoading: boolean;
   showLyrics: boolean;
-  
+
   // Offline State
   downloadingSongs: Set<string>;
-  
+
   // Actions
   toggleDownload: (song: Song) => Promise<void>;
   toggleShuffle: () => void;
   toggleRepeatMode: () => void;
-  playSong: (song: Song) => void;
-  playSongInQueue: (song: Song, queue: Song[]) => void;
+  playSong: (song: Song, startSeconds?: number) => void;
+  playSongInQueue: (song: Song, queue: Song[], startSeconds?: number) => void;
   addToQueue: (song: Song) => void;
   removeFromQueue: (index: number) => void;
   playFromQueue: (index: number) => void;
@@ -47,7 +47,7 @@ interface PlayerState {
   seekTo: (time: number) => void;
   syncState: () => void;
   setIsNowPlayingOpen: (isOpen: boolean) => void;
-  
+
   // Lyrics Actions
   fetchLyrics: (song: Song) => Promise<void>;
   updateLyrics: (data: LyricsData) => Promise<void>;
@@ -71,7 +71,7 @@ export const usePlayerStore = create<PlayerState>()(
       isLyricsLoading: false,
       showLyrics: false,
       downloadingSongs: new Set(),
-  
+
       toggleDownload: async (song: Song) => {
         const { downloadingSongs } = get();
         if (downloadingSongs.has(song.id)) return;
@@ -80,12 +80,12 @@ export const usePlayerStore = create<PlayerState>()(
           await OfflineService.removeDownload(song.id);
           toast.success('Descarga eliminada');
           // Refresh state
-          set({ downloadingSongs: new Set(get().downloadingSongs) }); 
+          set({ downloadingSongs: new Set(get().downloadingSongs) });
           return;
         }
 
-        set((state) => ({ 
-          downloadingSongs: new Set(state.downloadingSongs).add(song.id) 
+        set((state) => ({
+          downloadingSongs: new Set(state.downloadingSongs).add(song.id)
         }));
 
         try {
@@ -95,34 +95,108 @@ export const usePlayerStore = create<PlayerState>()(
           console.error(error);
           toast.error('Error al descargar');
         } finally {
-          const nextSet = new Set(get().downloadingSongs);
-          nextSet.delete(song.id);
-          set({ downloadingSongs: nextSet });
+          setTimeout(() => {
+            const nextSet = new Set(get().downloadingSongs);
+            nextSet.delete(song.id);
+            set({ downloadingSongs: nextSet });
+          }, 500);
         }
       },
 
       toggleShuffle: () => set((state) => ({ isShuffle: !state.isShuffle })),
-      
+
       toggleRepeatMode: () => set((state) => {
         const modes: ('off' | 'all' | 'one')[] = ['off', 'all', 'one'];
         const nextIndex = (modes.indexOf(state.repeatMode) + 1) % modes.length;
         return { repeatMode: modes[nextIndex] };
       }),
 
-      playSong: async (song: Song) => {
+      playSong: async (song: Song, startSeconds: number = 0) => {
         LibraryService.recordPlay(song);
-        const localUrl = await OfflineService.getOfflineUrl(song.id);
-        set({ currentSong: song, isPlaying: true, queue: [song], lyrics: null });
+        set({ currentSong: song, isPlaying: true, queue: [song], lyrics: null, progress: startSeconds });
         get().fetchLyrics(song);
-        audioEngine.loadSong(song.id, 0, true, localUrl || undefined);
+        const finalUrl = await OfflineService.getOfflineUrl(song.id);
+        if (finalUrl) {
+          audioEngine.loadSong(song, startSeconds, true, finalUrl);
+          return;
+        }
+        audioEngine.loadSong(song, startSeconds, true);
+        const isTauri = typeof window !== 'undefined' && (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+        if (isTauri) {
+          try {
+            const { invoke } = await import('@tauri-apps/api/core');
+            const streamUrl = await invoke('get_streaming_url', { videoId: song.id });
+            if (get().currentSong?.id === song.id && streamUrl) {
+              audioEngine.loadSong(song, startSeconds, get().isPlaying, streamUrl as string);
+              OfflineService.cacheSong(song);
+            }
+          } catch (e) {
+            console.error('Tauri streaming extraction failed:', e);
+          }
+        } else {
+          try {
+            const { CapacitorHttp } = await import('@capacitor/core');
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.195:5000";
+            const response = await CapacitorHttp.get({
+              url: `${apiUrl}/stream`,
+              params: { id: song.id }
+            });
+            if (response.status === 200 && response.data.url) {
+              if (get().currentSong?.id === song.id) {
+                audioEngine.loadSong(song, startSeconds, get().isPlaying, response.data.url);
+                OfflineService.cacheSong(song);
+              }
+            }
+          } catch (e) {
+            console.error('Capacitor streaming extraction failed:', e);
+          }
+        }
       },
-      
-      playSongInQueue: async (song: Song, queue: Song[]) => {
+
+      playSongInQueue: async (song: Song, queue: Song[], startSeconds: number = 0) => {
         LibraryService.recordPlay(song);
-        const localUrl = await OfflineService.getOfflineUrl(song.id);
-        set({ currentSong: song, isPlaying: true, queue, lyrics: null });
+        set({ currentSong: song, isPlaying: true, queue, lyrics: null, progress: startSeconds });
         get().fetchLyrics(song);
-        audioEngine.loadSong(song.id, 0, true, localUrl || undefined);
+        const offlineUrl = await OfflineService.getOfflineUrl(song.id);
+        if (offlineUrl) {
+          audioEngine.loadSong(song, startSeconds, true, offlineUrl);
+          return;
+        }
+        const cachedUrl = await OfflineService.getCachedUrl(song.id);
+        if (cachedUrl) {
+          audioEngine.loadSong(song, startSeconds, true, cachedUrl);
+          return;
+        }
+        const isTauri = typeof window !== 'undefined' && (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+        if (isTauri) {
+          try {
+            const { invoke } = await import('@tauri-apps/api/core');
+            const streamUrl = await invoke('get_streaming_url', { videoId: song.id });
+            if (get().currentSong?.id === song.id && streamUrl) {
+              audioEngine.loadSong(song, startSeconds, get().isPlaying, streamUrl as string);
+              OfflineService.cacheSong(song);
+            }
+          } catch (e) {
+            console.error('Tauri streaming extraction failed:', e);
+          }
+        } else {
+          try {
+            const { CapacitorHttp } = await import('@capacitor/core');
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.195:5000";
+            const response = await CapacitorHttp.get({
+              url: `${apiUrl}/stream`,
+              params: { id: song.id }
+            });
+            if (response.status === 200 && response.data.url) {
+              if (get().currentSong?.id === song.id) {
+                audioEngine.loadSong(song, startSeconds, get().isPlaying, response.data.url);
+                OfflineService.cacheSong(song);
+              }
+            }
+          } catch (e) {
+            console.error('Capacitor streaming extraction failed:', e);
+          }
+        }
       },
 
       addToQueue: (song: Song) => set((state) => {
@@ -140,32 +214,41 @@ export const usePlayerStore = create<PlayerState>()(
         return { queue: newQueue };
       }),
 
-      playFromQueue: (index: number) => set((state) => {
-        const newSong = state.queue[index];
-        if (!newSong) return state;
-        if (newSong.id !== state.currentSong?.id) {
-           LibraryService.recordPlay(newSong);
-           get().fetchLyrics(newSong);
-        }
-        return { currentSong: newSong, isPlaying: true, progress: 0, lyrics: null };
-      }),
+      playFromQueue: (index: number) => {
+        const { queue } = get();
+        const newSong = queue[index];
+        if (!newSong) return;
+        get().playSongInQueue(newSong, queue);
+      },
 
-      play: () => set({ isPlaying: true }),
-      
+      play: () => {
+        const { currentSong, queue, progress } = get();
+        if (currentSong && !audioEngine.hasSource()) {
+          get().playSongInQueue(currentSong, queue, progress);
+          return;
+        }
+        set({ isPlaying: true });
+      },
+
       pause: () => set({ isPlaying: false }),
-      
+
       togglePlayPause: () => {
-        const { isPlaying, currentSong } = get();
-        if (currentSong) set({ isPlaying: !isPlaying });
+        const { isPlaying } = get();
+        if (isPlaying) {
+          get().pause();
+        } else {
+          get().play();
+        }
       },
 
       playNext: () => {
         const { currentSong, queue, isShuffle, repeatMode } = get();
         if (!currentSong || queue.length === 0) return;
-        
+
         // Repeat One handling
         if (repeatMode === 'one') {
-          set({ progress: 0, seekPosition: 0 });
+          get().seekTo(0);
+          get().play();
           return;
         }
 
@@ -187,29 +270,30 @@ export const usePlayerStore = create<PlayerState>()(
 
         if (nextIndex !== -1) {
           const nextSong = queue[nextIndex];
-          LibraryService.recordPlay(nextSong);
-          set({ currentSong: nextSong, isPlaying: true, progress: 0, lyrics: null });
-          get().fetchLyrics(nextSong);
+          get().playSongInQueue(nextSong, queue);
         }
       },
 
       playPrevious: () => {
         const { currentSong, queue, progress, repeatMode, isShuffle } = get();
         if (!currentSong || queue.length === 0) return;
-        
+
+        // Standard music player behavior: if song > 3s, restart it
         if (progress > 3) {
-          set({ progress: 0, seekPosition: 0 });
-          return; 
+          get().seekTo(0);
+          return;
         }
 
-        if (queue.length <= 1) return;
+        if (queue.length <= 1) {
+          get().seekTo(0);
+          return;
+        }
 
         const currentIndex = queue.findIndex(s => s.id === currentSong.id);
         let prevIndex = -1;
 
         if (isShuffle) {
-           // On shuffle, previous is also random for now, or we could track history
-           prevIndex = Math.floor(Math.random() * queue.length);
+          prevIndex = Math.floor(Math.random() * queue.length);
         } else {
           if (currentIndex > 0) {
             prevIndex = currentIndex - 1;
@@ -220,9 +304,9 @@ export const usePlayerStore = create<PlayerState>()(
 
         if (prevIndex !== -1) {
           const prevSong = queue[prevIndex];
-          LibraryService.recordPlay(prevSong);
-          set({ currentSong: prevSong, isPlaying: true, progress: 0, lyrics: null });
-          get().fetchLyrics(prevSong);
+          get().playSongInQueue(prevSong, queue);
+        } else {
+          get().seekTo(0);
         }
       },
 
@@ -236,7 +320,7 @@ export const usePlayerStore = create<PlayerState>()(
       setIsNowPlayingOpen: (isOpen: boolean) => set({ isNowPlayingOpen: isOpen }),
 
       syncState: () => {
-        set({ 
+        set({
           progress: audioEngine.getCurrentTime(),
           duration: audioEngine.getDuration(),
           isPlaying: audioEngine.getPlayerState() === 1
@@ -258,7 +342,7 @@ export const usePlayerStore = create<PlayerState>()(
               await LibraryService.saveLyrics(song.id, data);
             }
           }
-          
+
           if (data?.syncedLyrics) {
             const parsed = lyricsService.parseSyncedLyrics(data.syncedLyrics);
             set({ lyrics: parsed });
@@ -275,7 +359,7 @@ export const usePlayerStore = create<PlayerState>()(
           set({ isLyricsLoading: false });
         }
       },
-      
+
       updateLyrics: async (data: LyricsData) => {
         const { currentSong } = get();
         if (currentSong) {
@@ -294,7 +378,7 @@ export const usePlayerStore = create<PlayerState>()(
           set({ lyrics: null });
         }
       },
-      
+
       setShowLyrics: (show: boolean) => set({ showLyrics: show }),
     }),
     {

@@ -22,7 +22,7 @@ export default function Home() {
   );
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-screen pt-safe">
       <main className="flex-1 p-6 pb-32 max-w-5xl mx-auto w-full">
         {/* Header Section */}
         <section className="mt-10 mb-16 relative overflow-hidden rounded-[40px] bg-linear-to-br from-[#7C3AED] via-[#6D28D9] to-black p-10 md:p-14 text-white shadow-2xl shadow-[#7C3AED]/20 group">

@@ -70,7 +70,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <main className="flex-1 p-6 pb-32 min-h-screen max-w-2xl mx-auto transition-colors duration-500">
+    <main className="flex-1 p-6 pb-32 min-h-screen pt-safe max-w-2xl mx-auto transition-colors duration-500">
       <div className="flex items-center gap-4 mb-10">
         <Link href="/library" className="p-3 bg-black/5 dark:bg-white/5 hover:bg-[#7C3AED]/10 rounded-2xl transition-all group shadow-sm">
           <ChevronLeft size={24} className="text-black/60 dark:text-white/60 group-hover:text-[#7C3AED]" />

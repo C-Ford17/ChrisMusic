@@ -1,0 +1,20 @@
+# Permissions for custom Rust commands
+[[permission]]
+identifier = "allow-download-to-disk"
+description = "Allow downloading songs to disk"
+commands.allow = ["download_to_disk"]
+
+[[permission]]
+identifier = "allow-search-youtube-native-cmd"
+description = "Allow searching YouTube via Rust"
+commands.allow = ["search_youtube_native_cmd"]
+
+[[permission]]
+identifier = "allow-get-streaming-url"a
+description = "Allow getting YouTube streaming URLs"
+commands.allow = ["get_streaming_url"]
+
+[[permission]]
+identifier = "allow-test-ytdlp"
+description = "Allow testing yt-dlp"
+commands.allow = ["test_ytdlp"]

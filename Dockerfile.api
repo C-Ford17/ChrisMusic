@@ -1,0 +1,26 @@
+FROM python:3.11-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv (extremely fast pip replacement)
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+# Install yt-dlp
+RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
+    && chmod a+rx /usr/local/bin/yt-dlp
+
+WORKDIR /app
+
+# Install dependencies using uv
+COPY requirements.txt .
+RUN uv pip install --no-cache-dir --system -r requirements.txt
+
+COPY api.py .
+
+EXPOSE 5000
+
+CMD ["python", "api.py"]

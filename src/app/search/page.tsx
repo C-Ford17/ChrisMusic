@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { usePlayerStore } from '@/features/player/store/playerStore';
 import { Search, Plus, ListPlus, Music, Clock, Trash2, X, Download, Check, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -10,14 +10,25 @@ import { AddToPlaylistModal } from '@/shared/components/AddToPlaylistModal';
 import { LibraryService } from '@/features/library/services/libraryService';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/core/db/db';
+import { CapacitorHttp } from '@capacitor/core';
+
 
 export default function SearchPage() {
+  useEffect(() => {
+    const handleError = (e: ErrorEvent) => {
+      console.error("CHRIS_LOG_JS_ERROR:", e.message, "at", e.filename, ":", e.lineno);
+    };
+    window.addEventListener('error', handleError);
+    console.log("CHRIS_LOG_JS: SearchPage initialized and error listener attached");
+    return () => window.removeEventListener('error', handleError);
+  }, []);
+
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Song[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedSong, setSelectedSong] = useState<Song | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  
+
   const { playSong, addToQueue, toggleDownload, downloadingSongs } = usePlayerStore();
 
   const searchHistory = useLiveQuery(
@@ -32,26 +43,47 @@ export default function SearchPage() {
     },
     []
   ) || new Set();
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://[IP_ADDRESS]:5000";
 
   const performSearch = async (searchTerm: string) => {
     if (!searchTerm.trim()) return;
     setLoading(true);
-    setQuery(searchTerm);
     try {
-      const res = await fetch(`/api/youtube/search?q=${encodeURIComponent(searchTerm)}`);
-      const data = await res.json();
-      if (data.results) {
-        setResults(data.results);
-        // Save to search history
-        LibraryService.recordSearch(searchTerm);
+      const isTauri = !!(window as any).__TAURI_INTERNALS__;
+
+      if (isTauri) {
+        const { invoke } = await import('@tauri-apps/api/core');
+        const results = await invoke<Song[]>('search_youtube_native_cmd', { query: searchTerm });
+        if (Array.isArray(results)) { setResults(results); LibraryService.recordSearch(searchTerm); }
+        return;
       }
-    } catch (err) {
-      console.error(err);
-      toast.error('Search failed', { description: 'Could not connect to YouTube' });
+
+      // ✅ Solo tu API — sin fallback a Invidious por ahora
+      console.log("CHRIS_LOG_JS: Calling API:", apiUrl);
+      const response = await CapacitorHttp.get({
+        url: `${apiUrl}/search`,
+        params: { q: searchTerm },
+      });
+
+      console.log("CHRIS_LOG_JS: Status:", response.status, "Results:", response.data?.length);
+
+      if (response.status === 200 && Array.isArray(response.data) && response.data.length > 0) {
+        setResults(response.data);
+        LibraryService.recordSearch(searchTerm);
+      } else {
+        toast.error("No se encontraron resultados");
+      }
+    } catch (err: any) {
+      console.error("CHRIS_LOG_JS: Error:", err);
+      toast.error(`Error: ${err?.message}`);
     } finally {
       setLoading(false);
     }
   };
+
+
+
+
 
   const searchYouTube = (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,15 +94,19 @@ export default function SearchPage() {
     await LibraryService.clearSearchHistory();
     toast.success('Historial borrado');
   };
+  useEffect(() => {
+    // Search history and results cleanup on load if needed
+  }, []);
+
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-screen pt-safe">
       <main className="flex-1 p-6 pb-40 max-w-5xl mx-auto w-full">
         <div className="mb-10">
           <div className="flex items-center justify-between mb-8">
             <h1 className="text-4xl font-black tracking-tighter">Buscador</h1>
             {searchHistory && searchHistory.length > 0 && results.length === 0 && !query && (
-              <button 
+              <button
                 onClick={clearHistory}
                 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-red-500/50 hover:text-red-500 transition-colors p-2"
               >
@@ -79,12 +115,20 @@ export default function SearchPage() {
               </button>
             )}
           </div>
-          
-          <form onSubmit={searchYouTube} className="relative group">
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              performSearch(query);
+            }}
+            action="javascript:void(0)"
+            className="relative group"
+          >
             <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#7C3AED] transition-colors" size={24} />
             <input
               type="text"
-              autoFocus
+              enterKeyHint="search"
               placeholder="¿Qué quieres escuchar hoy?"
               className="w-full bg-black/5 dark:bg-white/5 text-black dark:text-white rounded-[24px] py-6 px-16 outline-none focus:ring-4 focus:ring-[#7C3AED]/20 border border-black/5 dark:border-white/10 transition-all placeholder:text-gray-500 font-bold text-lg"
               value={query}
@@ -92,17 +136,16 @@ export default function SearchPage() {
                 setQuery(e.target.value);
                 if (!e.target.value) setResults([]);
               }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  performSearch(query);
+                }
+              }}
             />
-            {query && (
-              <button 
-                type="button"
-                onClick={() => { setQuery(''); setResults([]); }}
-                className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-black dark:hover:text-white"
-              >
-                <X size={20} />
-              </button>
-            )}
+            {/* botones */}
           </form>
+
 
           {/* Search History Chips */}
           {!query && searchHistory && searchHistory.length > 0 && (
@@ -136,27 +179,27 @@ export default function SearchPage() {
               const isDownloading = downloadingSongs.has(song.id);
 
               return (
-                <div 
-                  key={song.id} 
+                <div
+                  key={song.id}
                   className="flex flex-col p-4 rounded-[32px] bg-black/[0.02] dark:bg-white/[0.02] hover:bg-white dark:hover:bg-white/5 border border-black/5 dark:border-white/5 cursor-pointer transition-all group active:scale-[0.98] shadow-sm hover:shadow-xl relative overflow-hidden"
                   onClick={() => playSong(song)}
                 >
                   <div className="relative w-full aspect-square mb-4 bg-gray-200 dark:bg-gray-800 rounded-[24px] overflow-hidden shadow-md">
                     <Image src={song.thumbnailUrl} alt={song.title} fill sizes="(max-width: 768px) 100vw, 300px" className="object-cover group-hover:scale-110 transition-transform duration-700" />
                     <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                       <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-black shadow-xl scale-90 group-hover:scale-100 transition-transform">
-                          <Music size={24} fill="currentColor" />
-                       </div>
+                      <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-black shadow-xl scale-90 group-hover:scale-100 transition-transform">
+                        <Music size={24} fill="currentColor" />
+                      </div>
                     </div>
                   </div>
                   <div className="flex-1 min-w-0 px-1">
-                    <h3 className="text-black dark:text-white font-black truncate group-hover:text-[#7C3AED] transition-colors tracking-tight text-lg">{song.title}</h3>
+                    <h3 className="text-black dark:text-white font-black line-clamp-2 group-hover:text-[#7C3AED] transition-colors tracking-tight text-lg leading-tight min-h-[3rem] overflow-hidden">{song.title}</h3>
                     <p className="text-gray-500 dark:text-gray-400 text-xs font-bold truncate mt-1 uppercase tracking-wider">{song.artistName}</p>
                   </div>
-                  
+
                   <div className="flex items-center justify-between mt-4 pt-4 border-t border-black/5 dark:border-white/5">
                     <div className="flex gap-1">
-                      <button 
+                      <button
                         onClick={(e) => {
                           e.stopPropagation();
                           addToQueue(song);
@@ -167,7 +210,7 @@ export default function SearchPage() {
                       >
                         <Plus size={20} />
                       </button>
-                      <button 
+                      <button
                         onClick={(e) => {
                           e.stopPropagation();
                           setSelectedSong(song);
@@ -180,18 +223,17 @@ export default function SearchPage() {
                       </button>
                     </div>
 
-                    <button 
+                    <button
                       onClick={(e) => {
                         e.stopPropagation();
                         toggleDownload(song);
                       }}
-                      className={`w-10 h-10 flex items-center justify-center rounded-full transition-all ${
-                        isDownloaded 
-                          ? 'bg-[#7C3AED]/10 text-[#7C3AED]' 
-                          : isDownloading 
-                            ? 'bg-black/5 dark:bg-white/5 text-gray-400'
-                            : 'bg-black/5 dark:bg-white/5 text-gray-500 hover:text-black dark:hover:text-white hover:bg-black/10 dark:hover:bg-white/10'
-                      }`}
+                      className={`w-10 h-10 flex items-center justify-center rounded-full transition-all ${isDownloaded
+                        ? 'bg-[#7C3AED]/10 text-[#7C3AED]'
+                        : isDownloading
+                          ? 'bg-black/5 dark:bg-white/5 text-gray-400'
+                          : 'bg-black/5 dark:bg-white/5 text-gray-500 hover:text-black dark:hover:text-white hover:bg-black/10 dark:hover:bg-white/10'
+                        }`}
                       disabled={isDownloading}
                       title={isDownloaded ? 'Eliminar descarga' : 'Descargar para offline'}
                     >
@@ -210,8 +252,8 @@ export default function SearchPage() {
           </div>
         ) : query && !loading ? (
           <div className="text-center py-32 opacity-20 space-y-4">
-             <Music size={64} className="mx-auto mb-4" />
-             <p className="text-2xl font-black tracking-tighter">No encontramos nada con &quot;{query}&quot;</p>
+            <Music size={64} className="mx-auto mb-4" />
+            <p className="text-2xl font-black tracking-tighter">No encontramos nada con &quot;{query}&quot;</p>
           </div>
         ) : !searchHistory || searchHistory.length === 0 ? (
           <div className="text-center py-40 opacity-10 space-y-8">
@@ -223,10 +265,10 @@ export default function SearchPage() {
         ) : null}
       </main>
 
-      <AddToPlaylistModal 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
-        song={selectedSong} 
+      <AddToPlaylistModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        song={selectedSong}
       />
     </div>
   );

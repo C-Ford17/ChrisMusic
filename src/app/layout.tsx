@@ -38,7 +38,7 @@ export default function RootLayout({
   return (
     <html lang="es" suppressHydrationWarning>
       <body
-        className={`${inter.className} bg-white dark:bg-[#0A0A0A] text-black dark:text-white min-h-screen pb-24 sm:pl-64 sm:pb-24 touch-manipulation transition-colors duration-300`}
+        className={`${inter.className} bg-white dark:bg-[#0A0A0A] text-black dark:text-white min-h-screen pb-[calc(8rem+env(safe-area-inset-bottom,0px))] sm:pl-64 sm:pb-24 touch-manipulation transition-colors duration-300`}
       >
         <Providers>
           {children}

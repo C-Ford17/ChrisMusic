@@ -39,7 +39,7 @@ export default function LibraryPage() {
   );
 
   return (
-    <main className="flex-1 p-6 pb-40 min-h-screen bg-white dark:bg-[#0A0A0A] transition-colors duration-500">
+    <main className="flex-1 p-6 pb-40 min-h-screen pt-safe bg-white dark:bg-[#0A0A0A] transition-colors duration-500">
       <div className="mb-8 flex items-center justify-between">
         <h1 className="text-4xl font-black tracking-tighter text-black dark:text-white">Tu Biblioteca</h1>
         <Link href="/settings" className="p-3 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 rounded-2xl transition-all group">
@@ -128,7 +128,7 @@ export default function LibraryPage() {
 
           {/* User Playlists */}
           {filteredPlaylists.map((playlist) => (
-            <Link href={`/library/playlist/${playlist.id}`} key={playlist.id}>
+            <Link href={`/library/playlist?id=${playlist.id}`} key={playlist.id}>
               <div className="aspect-square bg-black/[0.02] dark:bg-white/5 rounded-3xl p-6 flex flex-col justify-end cursor-pointer hover:bg-white dark:hover:bg-white/10 transition-all relative overflow-hidden group border border-black/5 dark:border-white/10 hover:border-[#7C3AED]/30 shadow-sm hover:shadow-2xl">
                 <Music size={40} className="absolute top-6 right-6 opacity-[0.05] dark:opacity-20 text-black dark:text-white group-hover:scale-110 group-hover:text-[#7C3AED] group-hover:opacity-40 transition-all" />
                 <h3 className="font-black relative z-10 text-lg text-black dark:text-white truncate tracking-tighter">{playlist.name}</h3>

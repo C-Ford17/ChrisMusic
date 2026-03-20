@@ -1,21 +1,29 @@
 /**
  * AudioEngine Service (Singleton)
  * Centralizes all playback logic for ChrisMusic.
- * Decoupled from React to enable high-quality unit testing.
+ * Integrates with Capacitor MediaSession for native Android notifications.
+ *
+ * - **Cambio**: El botón "Play" ahora detecta si la sesión fue restaurada y solicita automáticamente un nuevo enlace de streaming si es necesario, retomando exactamente desde el segundo donde te quedaste.
+ *
+ * ## 5. Notificación Nativa y Segundo Plano (Android)
+ * Hemos implementado una solución robusta para que la música no se detenga y la notificación sea siempre visible:
+ * - **Plugins Nativos**: Integramos `@jofr/capacitor-media-session` y `capacitor-plugin-backgroundservice`.
+ * - **Foreground Service**: La app ahora corre como un "Servicio de Primer Plano" (mediaPlayback), lo que evita que Android la cierre al bloquear el teléfono.
+ * - **Permisos**: Añadimos permisos de `POST_NOTIFICATIONS` y `FOREGROUND_SERVICE` para cumplir con las últimas versiones de Android (13 y 14).
+ *
+ * ## 6. Descargas de Alta Velocidad (CapacitorHttp)
  */
 class AudioEngine {
   private static instance: AudioEngine;
-  private ytPlayer: YT.Player | null = null;
   private htmlPlayer: HTMLAudioElement | null = null;
   public isReady = false;
   private volume = 1;
-  private currentSource: 'youtube' | 'local' = 'youtube';
   private onStateChange: ((state: number) => void) | null = null;
 
   private constructor() {
     if (typeof window !== 'undefined') {
       this.htmlPlayer = new Audio();
-      this.isReady = true; // Local player is always ready once initialized
+      this.isReady = true;
       this.htmlPlayer.addEventListener('ended', () => {
         if (this.onStateChange) this.onStateChange(0); // State 0 = Ended
       });
@@ -25,12 +33,10 @@ class AudioEngine {
       this.htmlPlayer.addEventListener('pause', () => {
         if (this.onStateChange) this.onStateChange(2); // State 2 = Paused
       });
-      // New listeners for metadata and progressive updates
       this.htmlPlayer.addEventListener('loadedmetadata', () => {
-        if (this.onStateChange) this.onStateChange(1); // Force update once duration is known
+        if (this.onStateChange) this.onStateChange(1);
       });
       this.htmlPlayer.addEventListener('timeupdate', () => {
-        // This helps react-based timers stay in sync with the hidden audio element
         if (this.onStateChange) this.onStateChange(this.getPlayerState());
       });
     }
@@ -47,99 +53,206 @@ class AudioEngine {
     return AudioEngine.instance;
   }
 
-  public setPlayer(player: YT.Player) {
-    this.ytPlayer = player;
-    this.isReady = true;
-    this.syncVolume();
-  }
-
-  public play() {
-    if (this.currentSource === 'local') {
-      this.htmlPlayer?.play();
-    } else {
-      this.ytPlayer?.playVideo();
+  private async updateMediaSessionState(state: 'playing' | 'paused' | 'none') {
+    const isMobile = typeof window !== 'undefined' && (window as any).Capacitor;
+    if (isMobile) {
+      try {
+        const { MediaSession: CapMediaSession } = await import('@jofr/capacitor-media-session');
+        await CapMediaSession.setPlaybackState({ playbackState: state });
+      } catch (e) {}
+    }
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = state;
     }
   }
 
-  public pause() {
-    if (this.currentSource === 'local') {
-      this.htmlPlayer?.pause();
-    } else {
-      this.ytPlayer?.pauseVideo();
+  public async play() {
+    try {
+      if (this.htmlPlayer && this.htmlPlayer.src && this.htmlPlayer.src !== window.location.href) {
+        await this.htmlPlayer.play();
+        await this.updateMediaSessionState('playing');
+        this.updateMediaSessionPosition();
+      }
+    } catch (error) {
+      console.error('AudioEngine playback error:', error);
     }
+  }
+
+  public async pause() {
+    this.htmlPlayer?.pause();
+    await this.updateMediaSessionState('paused');
   }
 
   public seekTo(seconds: number) {
-    if (this.currentSource === 'local' && this.htmlPlayer) {
+    if (this.htmlPlayer) {
       this.htmlPlayer.currentTime = seconds;
-    } else if (this.ytPlayer?.seekTo) {
-      this.ytPlayer.seekTo(seconds, true);
     }
   }
 
   public setVolume(volume: number) {
     this.volume = volume;
-    this.syncVolume();
-  }
-
-  private syncVolume() {
     if (this.htmlPlayer) {
       this.htmlPlayer.volume = this.volume;
     }
-    if (this.ytPlayer?.setVolume) {
-      this.ytPlayer.setVolume(this.volume * 100);
+  }
+
+  public hasSource(): boolean {
+    return !!(this.htmlPlayer && this.htmlPlayer.src && this.htmlPlayer.src !== window.location.href && this.htmlPlayer.src !== '');
+  }
+
+  public async reset() {
+    if (this.htmlPlayer) {
+      this.htmlPlayer.pause();
+      this.htmlPlayer.removeAttribute('src');
+      this.htmlPlayer.load();
+      this.htmlPlayer.currentTime = 0;
+    }
+
+    const isMobile = typeof window !== 'undefined' && (window as any).Capacitor;
+    if (isMobile) {
+      try {
+        await this.updateMediaSessionState('none');
+      } catch (_e) {}
+    }
+
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.metadata = null;
+      navigator.mediaSession.playbackState = 'none';
     }
   }
 
-  public loadSong(songId: string, startSeconds: number = 0, autoplay: boolean = true, localUrl?: string) {
-    if (localUrl) {
-      this.currentSource = 'local';
-      this.ytPlayer?.pauseVideo(); // Stop YouTube if playing
-      if (this.htmlPlayer) {
-        this.htmlPlayer.src = localUrl;
-        this.htmlPlayer.currentTime = startSeconds;
-        if (autoplay) this.htmlPlayer.play();
+  public async loadSong(song: any, startSeconds: number = 0, autoplay: boolean = true, localUrl?: string) {
+    this.reset();
+
+    if (localUrl && this.htmlPlayer) {
+      this.htmlPlayer.src = localUrl;
+      this.htmlPlayer.load(); 
+      
+      const onCanPlay = () => {
+        if (this.htmlPlayer) {
+          this.htmlPlayer.currentTime = startSeconds;
+          if (autoplay) this.play();
+          this.updateMediaSessionPosition();
+          this.htmlPlayer.removeEventListener('canplay', onCanPlay);
+        }
+      };
+
+      this.htmlPlayer.addEventListener('canplay', onCanPlay);
+
+      // Update MediaSession (Native + Web)
+      const isMobile = typeof window !== 'undefined' && (window as any).Capacitor;
+      
+      const metadata = {
+        title: song.title,
+        artist: song.artistName,
+        album: song.albumName || 'ChrisMusic',
+        artwork: [
+          { src: song.thumbnailUrl || '/icon-192x192.png', sizes: '192x192', type: 'image/jpeg' },
+          { src: song.thumbnailUrl || '/icon-512x512.png', sizes: '512x512', type: 'image/jpeg' },
+        ]
+      };
+
+      if (isMobile) {
+        try {
+          const { MediaSession: CapMediaSession } = await import('@jofr/capacitor-media-session');
+          await CapMediaSession.setMetadata(metadata);
+          await this.updateMediaSessionState(autoplay ? 'playing' : 'paused');
+        } catch (_e) {
+          console.error('Capacitor MediaSession error:', _e);
+        }
       }
-    } else {
-      this.currentSource = 'youtube';
-      this.htmlPlayer?.pause(); // Stop Local if playing
-      if (this.ytPlayer?.loadVideoById && autoplay) {
-        this.ytPlayer.loadVideoById({ videoId: songId, startSeconds });
-      } else if (this.ytPlayer?.cueVideoById) {
-        this.ytPlayer.cueVideoById({ videoId: songId, startSeconds });
+
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.metadata = new MediaMetadata(metadata);
+        await this.updateMediaSessionState(autoplay ? 'playing' : 'paused');
       }
+    }
+  }
+
+  public async setMediaSessionActions(actions: { onPlay?: () => void, onPause?: () => void, onNext?: () => void, onPrevious?: () => void }) {
+    const isMobile = typeof window !== 'undefined' && (window as any).Capacitor;
+
+    if (isMobile) {
+      try {
+        const { MediaSession: CapMediaSession } = await import('@jofr/capacitor-media-session');
+        await CapMediaSession.setActionHandler({ action: 'play' }, async () => {
+          await this.play();
+          if (actions.onPlay) actions.onPlay();
+        });
+        await CapMediaSession.setActionHandler({ action: 'pause' }, async () => {
+          await this.pause();
+          if (actions.onPause) actions.onPause();
+        });
+        await CapMediaSession.setActionHandler({ action: 'nexttrack' }, actions.onNext || null);
+        await CapMediaSession.setActionHandler({ action: 'previoustrack' }, actions.onPrevious || null);
+        await CapMediaSession.setActionHandler({ action: 'seekto' }, (details) => {
+          if (typeof details.seekTime === 'number') this.seekTo(details.seekTime);
+        });
+      } catch (e) {
+        console.error('Capacitor MediaSession Actions error:', e);
+      }
+    }
+
+    if ('mediaSession' in navigator) {
+      if (actions.onPlay) {
+        navigator.mediaSession.setActionHandler('play', async () => {
+          await this.play();
+          if (actions.onPlay) actions.onPlay();
+        });
+      }
+      if (actions.onPause) {
+        navigator.mediaSession.setActionHandler('pause', () => {
+          this.pause();
+          if (actions.onPause) actions.onPause();
+        });
+      }
+      if (actions.onNext) navigator.mediaSession.setActionHandler('nexttrack', actions.onNext);
+      if (actions.onPrevious) navigator.mediaSession.setActionHandler('previoustrack', actions.onPrevious);
+      
+      navigator.mediaSession.setActionHandler('seekto', (details) => {
+        if (details.seekTime !== undefined) {
+          this.seekTo(details.seekTime);
+        }
+      });
     }
   }
 
   public getDuration(): number {
-    if (this.currentSource === 'local') {
-      return this.htmlPlayer?.duration || 0;
-    }
-    return this.ytPlayer?.getDuration ? this.ytPlayer.getDuration() : 0;
+    return this.htmlPlayer?.duration || 0;
   }
 
   public getCurrentTime(): number {
-    if (this.currentSource === 'local') {
-      return this.htmlPlayer?.currentTime || 0;
-    }
-    return this.ytPlayer?.getCurrentTime ? this.ytPlayer.getCurrentTime() : 0;
+    return this.htmlPlayer?.currentTime || 0;
   }
 
   public getPlayerState(): number {
-    if (this.currentSource === 'local') {
-      if (this.htmlPlayer?.paused) return 2; // Paused
-      if (this.htmlPlayer?.ended) return 0; // Ended
-      return 1; // Playing
-    }
-    return this.ytPlayer?.getPlayerState ? this.ytPlayer.getPlayerState() : -1;
+    if (this.htmlPlayer?.paused) return 2; // Paused
+    if (this.htmlPlayer?.ended) return 0; // Ended
+    return 1; // Playing
   }
 
-  public destroy() {
-    this.ytPlayer?.destroy?.();
-    this.htmlPlayer?.pause();
-    if (this.htmlPlayer) this.htmlPlayer.src = '';
-    this.ytPlayer = null;
-    this.isReady = false;
+  public async updateMediaSessionPosition() {
+    if (this.htmlPlayer) {
+      const positionState = {
+        duration: isFinite(this.htmlPlayer.duration) ? this.htmlPlayer.duration : 0,
+        playbackRate: this.htmlPlayer.playbackRate,
+        position: isFinite(this.htmlPlayer.currentTime) ? this.htmlPlayer.currentTime : 0,
+      };
+
+      const isMobile = typeof window !== 'undefined' && (window as any).Capacitor;
+      if (isMobile) {
+        try {
+          const { MediaSession: CapMediaSession } = await import('@jofr/capacitor-media-session');
+          CapMediaSession.setPositionState(positionState).catch(() => {});
+        } catch (e) {}
+      }
+
+      if ('mediaSession' in navigator) {
+        try {
+          navigator.mediaSession.setPositionState(positionState);
+        } catch (e) {}
+      }
+    }
   }
 }
 

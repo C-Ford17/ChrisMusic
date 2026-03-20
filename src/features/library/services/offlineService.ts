@@ -11,65 +11,201 @@ export const OfflineService = {
   async getOfflineUrl(songId: string): Promise<string | null> {
     const offlineSong = await db.offlineSongs.get(songId);
     if (!offlineSong) return null;
-    return URL.createObjectURL(offlineSong.audioBlob);
+    
+    if (offlineSong.filePath) {
+      if (typeof window !== 'undefined' && (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
+        const { convertFileSrc } = await import('@tauri-apps/api/core');
+        return convertFileSrc(offlineSong.filePath);
+      }
+    }
+
+    if (offlineSong.audioBlob) {
+      return URL.createObjectURL(offlineSong.audioBlob);
+    }
+
+    return null;
+  },
+
+  async getCachedUrl(songId: string): Promise<string | null> {
+    const cachedSong = await db.cachedSongs.get(songId);
+    if (!cachedSong) return null;
+    
+    if (cachedSong.filePath && typeof window !== 'undefined' && (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
+      const { convertFileSrc } = await import('@tauri-apps/api/core');
+      return convertFileSrc(cachedSong.filePath);
+    }
+
+    if (cachedSong.audioBlob) {
+      return URL.createObjectURL(cachedSong.audioBlob);
+    }
+
+    return null;
   },
 
   async downloadSong(song: Song): Promise<void> {
     if (await this.isDownloaded(song.id)) return;
 
     try {
-      // Step 1: Request discovery via our private server engine
-      const response = await fetch('/api/download', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoId: song.id })
-      });
-
-      if (!response.ok) {
-        throw new Error('Our internal download engine failed to generate a link.');
-      }
-
-      const data = await response.json();
-      const downloadUrl = data.url;
-
-      if (!downloadUrl) {
-        throw new Error('No audio URL found for this video.');
-      }
-
-      // Step 2: Download the final audio blob (passing through proxy to ensure CORS bypass)
-      const audioProxyUrl = `/api/proxy/piped?url=${encodeURIComponent(downloadUrl)}`;
-      const audioRes = await fetch(audioProxyUrl);
-      if (!audioRes.ok) throw new Error('CORS bypass proxy failed to fetch audio file.');
-
-      const blob = await audioRes.blob();
+      console.log(`[OfflineService] Starting download for: ${song.title} (${song.id})`);
+      const isTauri = typeof window !== 'undefined' && (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
       
-      await db.offlineSongs.put({
-        id: song.id,
-        song: song as LocalSong,
-        audioBlob: blob,
-        downloadedAt: Date.now()
-      });
+      if (isTauri) {
+        const { invoke } = await import('@tauri-apps/api/core');
+        const filePath = await invoke('download_to_disk', { 
+          videoId: song.id,
+          title: song.title,
+          isCache: false
+        }) as string;
+        
+        if (!filePath) throw new Error('Native download engine failed.');
 
-      // Step 3: Fetch and save lyrics for offline use
+        await db.offlineSongs.put({
+          id: song.id,
+          song: song as LocalSong,
+          filePath: filePath,
+          downloadedAt: Date.now()
+        });
+      } else {
+        // Capacitor / Web fallback
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+        const { CapacitorHttp } = await import('@capacitor/core');
+        
+        console.log(`[OfflineService] Fetching stream URL from: ${apiUrl}`);
+        // Step 1: Get high quality audio URL from Flask API
+        const streamRes = await CapacitorHttp.get({
+          url: `${apiUrl}/stream`,
+          params: { id: song.id }
+        });
+
+        if (streamRes.status !== 200 || !streamRes.data.url) {
+          throw new Error('Could not get streaming URL from API.');
+        }
+
+        const audioUrl = streamRes.data.url;
+        console.log(`[OfflineService] Audio URL obtained, starting binary download...`);
+
+        // Step 2: Download the audio via CapacitorHttp to bypass CORS
+        const audioRes = await CapacitorHttp.get({
+          url: audioUrl,
+          responseType: 'blob'
+        });
+
+        if (audioRes.status !== 200) throw new Error('Failed to download audio file via native layer.');
+
+        console.log(`[OfflineService] Binary data received, converting to Blob...`);
+        // Capacitor returns base64 string for 'blob' responseType
+        const base64Data = audioRes.data;
+        const blob = await fetch(`data:audio/mp4;base64,${base64Data}`).then(res => res.blob());
+        
+        console.log(`[OfflineService] Saving to IndexedDB...`);
+        await db.offlineSongs.put({
+          id: song.id,
+          song: song as LocalSong,
+          audioBlob: blob,
+          downloadedAt: Date.now()
+        });
+        console.log(`[OfflineService] Successfully saved to IndexedDB.`);
+      }
+
+      // Step 3: Lyrics
       try {
-        const lyricsRes = await fetch(`/api/youtube/lyrics?videoId=${song.id}`);
-        if (lyricsRes.ok) {
-          const lyricsData = await lyricsRes.ok ? await lyricsRes.json() : null;
-          if (lyricsData) {
-            await LibraryService.saveLyrics(song.id, lyricsData);
-          }
+        console.log(`[OfflineService] Syncing lyrics for offline use...`);
+        const { lyricsService } = await import('@/features/lyrics/services/lrclibService');
+        const data = await lyricsService.getLyrics(song.artistName, song.title, song.duration);
+        if (data) {
+          await LibraryService.saveLyrics(song.id, data);
+          console.log(`[OfflineService] Lyrics saved.`);
         }
       } catch (e) {
-        console.warn('Failed to fetch lyrics for offline use, skipping.', e);
+        console.warn('[OfflineService] Lyrics offline sync failed', e);
       }
 
-    } catch (error: any) {
-      console.error('Download error:', error.message);
+      console.log(`[OfflineService] Download process COMPLETE for: ${song.title}`);
+
+    } catch (error: unknown) {
+      console.error('[OfflineService] Download error:', error);
       throw error;
     }
   },
 
+  async cacheSong(song: Song): Promise<string | null> {
+    const isTauri = typeof window !== 'undefined' && (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+    
+    if (isTauri) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        const filePath = await invoke('download_to_disk', { 
+          videoId: song.id,
+          title: song.title,
+          isCache: true
+        }) as string;
+
+        if (filePath) {
+          await db.cachedSongs.put({
+            id: song.id,
+            song: song as LocalSong,
+            filePath: filePath,
+            cachedAt: Date.now()
+          });
+          return filePath;
+        }
+      } catch (e) {
+        console.warn('Tauri Caching failed:', e);
+      }
+    } else {
+      // Capacitor / Android Caching
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.195:5000";
+        const { CapacitorHttp } = await import('@capacitor/core');
+        
+        const streamRes = await CapacitorHttp.get({
+          url: `${apiUrl}/stream`,
+          params: { id: song.id }
+        });
+
+        if (streamRes.status === 200 && streamRes.data.url) {
+          const audioRes = await CapacitorHttp.get({
+            url: streamRes.data.url,
+            responseType: 'blob'
+          });
+
+          if (audioRes.status === 200) {
+            const base64Data = audioRes.data;
+            const blob = await fetch(`data:audio/mp4;base64,${base64Data}`).then(res => res.blob());
+            
+            await db.cachedSongs.put({
+              id: song.id,
+              song: song as LocalSong,
+              audioBlob: blob,
+              cachedAt: Date.now()
+            });
+            return 'blob';
+          }
+        }
+      } catch (e) {
+        console.warn('Capacitor Caching failed:', e);
+      }
+    }
+    return null;
+  },
+
   async removeDownload(songId: string): Promise<void> {
+    const offlineSong = await db.offlineSongs.get(songId);
+    if (!offlineSong) return;
+
+    if (offlineSong.filePath) {
+      if (typeof window !== 'undefined' && (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
+        try {
+          const { exists, remove } = await import('@tauri-apps/plugin-fs');
+          if (await exists(offlineSong.filePath)) {
+            await remove(offlineSong.filePath);
+          }
+        } catch (e) {
+          console.error('File removal failed:', e);
+        }
+      }
+    }
+
     await db.offlineSongs.delete(songId);
   },
 
