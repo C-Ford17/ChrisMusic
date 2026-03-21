@@ -20,6 +20,7 @@ class AudioEngine {
   private volume = 1;
   private onStateChange: ((state: number) => void) | null = null;
 
+
   private constructor() {
     if (typeof window !== 'undefined') {
       this.htmlPlayer = new Audio();
@@ -42,9 +43,11 @@ class AudioEngine {
     }
   }
 
+
   public setOnStateChange(callback: (state: number) => void) {
     this.onStateChange = callback;
   }
+
 
   public static getInstance(): AudioEngine {
     if (!AudioEngine.instance) {
@@ -53,18 +56,20 @@ class AudioEngine {
     return AudioEngine.instance;
   }
 
+
   private async updateMediaSessionState(state: 'playing' | 'paused' | 'none') {
     const isMobile = typeof window !== 'undefined' && (window as any).Capacitor;
     if (isMobile) {
       try {
         const { MediaSession: CapMediaSession } = await import('@jofr/capacitor-media-session');
         await CapMediaSession.setPlaybackState({ playbackState: state });
-      } catch (e) {}
+      } catch (e) { }
     }
     if ('mediaSession' in navigator) {
       navigator.mediaSession.playbackState = state;
     }
   }
+
 
   public async play() {
     try {
@@ -78,16 +83,19 @@ class AudioEngine {
     }
   }
 
+
   public async pause() {
     this.htmlPlayer?.pause();
     await this.updateMediaSessionState('paused');
   }
+
 
   public seekTo(seconds: number) {
     if (this.htmlPlayer) {
       this.htmlPlayer.currentTime = seconds;
     }
   }
+
 
   public setVolume(volume: number) {
     this.volume = volume;
@@ -96,9 +104,11 @@ class AudioEngine {
     }
   }
 
+
   public hasSource(): boolean {
     return !!(this.htmlPlayer && this.htmlPlayer.src && this.htmlPlayer.src !== window.location.href && this.htmlPlayer.src !== '');
   }
+
 
   public async reset() {
     if (this.htmlPlayer) {
@@ -108,12 +118,14 @@ class AudioEngine {
       this.htmlPlayer.currentTime = 0;
     }
 
+
     const isMobile = typeof window !== 'undefined' && (window as any).Capacitor;
     if (isMobile) {
       try {
         await this.updateMediaSessionState('none');
-      } catch (_e) {}
+      } catch (_e) { }
     }
+
 
     if ('mediaSession' in navigator) {
       navigator.mediaSession.metadata = null;
@@ -121,13 +133,16 @@ class AudioEngine {
     }
   }
 
-  public async loadSong(song: any, startSeconds: number = 0, autoplay: boolean = true, localUrl?: string) {
-    this.reset();
 
-    if (localUrl && this.htmlPlayer) {
-      this.htmlPlayer.src = localUrl;
-      this.htmlPlayer.load(); 
-      
+  public async loadSong(song: any, startSeconds: number = 0, autoplay: boolean = true, localUrl?: string) {
+    await this.reset();
+
+
+    const src = localUrl || (song as any).streamUrl;
+    if (src && this.htmlPlayer) {
+      this.htmlPlayer.src = src;
+      this.htmlPlayer.load();
+
       const onCanPlay = () => {
         if (this.htmlPlayer) {
           this.htmlPlayer.currentTime = startSeconds;
@@ -137,11 +152,13 @@ class AudioEngine {
         }
       };
 
+
       this.htmlPlayer.addEventListener('canplay', onCanPlay);
+
 
       // Update MediaSession (Native + Web)
       const isMobile = typeof window !== 'undefined' && (window as any).Capacitor;
-      
+
       const metadata = {
         title: song.title,
         artist: song.artistName,
@@ -151,6 +168,7 @@ class AudioEngine {
           { src: song.thumbnailUrl || '/icon-512x512.png', sizes: '512x512', type: 'image/jpeg' },
         ]
       };
+
 
       if (isMobile) {
         try {
@@ -162,6 +180,7 @@ class AudioEngine {
         }
       }
 
+
       if ('mediaSession' in navigator) {
         navigator.mediaSession.metadata = new MediaMetadata(metadata);
         await this.updateMediaSessionState(autoplay ? 'playing' : 'paused');
@@ -169,8 +188,10 @@ class AudioEngine {
     }
   }
 
+
   public async setMediaSessionActions(actions: { onPlay?: () => void, onPause?: () => void, onNext?: () => void, onPrevious?: () => void }) {
     const isMobile = typeof window !== 'undefined' && (window as any).Capacitor;
+
 
     if (isMobile) {
       try {
@@ -193,6 +214,7 @@ class AudioEngine {
       }
     }
 
+
     if ('mediaSession' in navigator) {
       if (actions.onPlay) {
         navigator.mediaSession.setActionHandler('play', async () => {
@@ -208,7 +230,7 @@ class AudioEngine {
       }
       if (actions.onNext) navigator.mediaSession.setActionHandler('nexttrack', actions.onNext);
       if (actions.onPrevious) navigator.mediaSession.setActionHandler('previoustrack', actions.onPrevious);
-      
+
       navigator.mediaSession.setActionHandler('seekto', (details) => {
         if (details.seekTime !== undefined) {
           this.seekTo(details.seekTime);
@@ -217,19 +239,28 @@ class AudioEngine {
     }
   }
 
+
   public getDuration(): number {
     return this.htmlPlayer?.duration || 0;
   }
 
+
   public getCurrentTime(): number {
     return this.htmlPlayer?.currentTime || 0;
   }
+
 
   public getPlayerState(): number {
     if (this.htmlPlayer?.paused) return 2; // Paused
     if (this.htmlPlayer?.ended) return 0; // Ended
     return 1; // Playing
   }
+
+
+  public async isPlayingNative(): Promise<boolean> {
+    return !this.htmlPlayer?.paused;
+  }
+
 
   public async updateMediaSessionPosition() {
     if (this.htmlPlayer) {
@@ -239,21 +270,24 @@ class AudioEngine {
         position: isFinite(this.htmlPlayer.currentTime) ? this.htmlPlayer.currentTime : 0,
       };
 
+
       const isMobile = typeof window !== 'undefined' && (window as any).Capacitor;
       if (isMobile) {
         try {
           const { MediaSession: CapMediaSession } = await import('@jofr/capacitor-media-session');
-          CapMediaSession.setPositionState(positionState).catch(() => {});
-        } catch (e) {}
+          CapMediaSession.setPositionState(positionState).catch(() => { });
+        } catch (e) { }
       }
+
 
       if ('mediaSession' in navigator) {
         try {
           navigator.mediaSession.setPositionState(positionState);
-        } catch (e) {}
+        } catch (e) { }
       }
     }
   }
 }
+
 
 export const audioEngine = AudioEngine.getInstance();

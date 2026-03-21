@@ -18,7 +18,6 @@ export function LyricsPanel() {
   const [searchResults, setSearchResults] = useState<LyricsData[]>([]);
   const [isSearchingOnline, setIsSearchingOnline] = useState(false);
 
-  // Sync active line based on progress
   useEffect(() => {
     if (!lyrics || lyrics.length === 0) return;
 
@@ -30,7 +29,6 @@ export function LyricsPanel() {
     if (index !== -1 && index !== activeLineIndex) {
       setActiveLineIndex(index);
       
-      // Auto-scroll
       if (scrollContainerRef.current) {
         const activeElement = scrollContainerRef.current.children[index] as HTMLElement;
         if (activeElement) {
@@ -87,7 +85,6 @@ export function LyricsPanel() {
 
   return (
     <div className="relative h-full w-full flex flex-col">
-      {/* Search Toggle Button */}
       {!isSearching && (
         <button 
           onClick={() => {
@@ -108,10 +105,10 @@ export function LyricsPanel() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="absolute inset-0 z-30 bg-white dark:bg-[#0A0A0A] p-8 flex flex-col overflow-hidden transition-colors"
+            className="absolute inset-0 z-30 bg-white dark:bg-[#0A0A0A] p-4 sm:p-8 flex flex-col overflow-hidden transition-colors"
           >
-            <div className="flex justify-between items-center mb-8">
-              <h3 className="text-2xl font-black text-black dark:text-white flex items-center gap-3 tracking-tighter">
+            <div className="flex justify-between items-center mb-4 sm:mb-8 shrink-0">
+              <h3 className="text-xl sm:text-2xl font-black text-black dark:text-white flex items-center gap-3 tracking-tighter">
                 <Search size={24} className="text-[#7C3AED]" />
                 Búsqueda Manual
               </h3>
@@ -120,27 +117,27 @@ export function LyricsPanel() {
               </button>
             </div>
 
-            <div className="space-y-4 mb-8">
+            <div className="space-y-3 sm:space-y-4 mb-6 sm:mb-8 shrink-0">
               <input 
                 value={query.title} 
                 onChange={e => setQuery({...query, title: e.target.value})}
                 placeholder="Título de la canción..."
-                className="w-full bg-black/3 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-2xl px-5 py-4 text-black dark:text-white placeholder:text-black/20 dark:placeholder:text-white/20 focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20 transition-all font-bold"
+                className="w-full bg-black/3 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-2xl px-5 py-3.5 sm:py-4 text-sm sm:text-base text-black dark:text-white placeholder:text-black/20 dark:placeholder:text-white/20 focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20 transition-all font-bold"
               />
-              <div className="flex gap-3">
+              <div className="flex gap-2 sm:gap-3">
                 <input 
                   value={query.artist} 
                   onChange={e => setQuery({...query, artist: e.target.value})}
                   placeholder="Artista..."
-                  className="flex-1 bg-black/3 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-2xl px-5 py-4 text-black dark:text-white placeholder:text-black/20 dark:placeholder:text-white/20 focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20 transition-all font-bold"
+                  className="flex-1 bg-black/3 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-2xl px-5 py-3.5 sm:py-4 text-sm sm:text-base text-black dark:text-white placeholder:text-black/20 dark:placeholder:text-white/20 focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20 transition-all font-bold"
                 />
                 <button 
                   onClick={handleSearch}
                   disabled={isSearchingOnline}
-                  className="bg-[#7C3AED] hover:bg-[#6D28D9] disabled:opacity-50 text-white rounded-2xl px-8 font-black transition-all shadow-xl shadow-[#7C3AED]/20 active:scale-95 flex items-center gap-2 uppercase text-xs tracking-widest"
+                  className="bg-[#7C3AED] hover:bg-[#6D28D9] disabled:opacity-50 text-white rounded-2xl px-6 sm:px-8 font-black transition-all shadow-xl shadow-[#7C3AED]/20 active:scale-95 flex items-center gap-2 uppercase text-[10px] sm:text-xs tracking-widest"
                 >
                   {isSearchingOnline ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Search size={18} />}
-                  Buscar
+                  <span className="hidden sm:inline">Buscar</span>
                 </button>
               </div>
             </div>
@@ -231,9 +228,7 @@ export function LyricsPanel() {
         )}
       </div>
 
-      {/* Footer gradient */}
       <div className="absolute inset-x-0 bottom-0 h-48 bg-linear-to-t from-white dark:from-[#0A0A0A] to-transparent pointer-events-none z-10" />
-      {/* Header gradient */}
       <div className="absolute inset-x-0 top-0 h-48 bg-linear-to-b from-white dark:from-[#0A0A0A] to-transparent pointer-events-none z-10" />
     </div>
   );

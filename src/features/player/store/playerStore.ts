@@ -23,6 +23,7 @@ interface PlayerState {
   lyrics: LyricsLine[] | null;
   isLyricsLoading: boolean;
   showLyrics: boolean;
+  isCaching: string | null; // ID of the song being cached
 
   // Offline State
   downloadingSongs: Set<string>;
@@ -39,7 +40,7 @@ interface PlayerState {
   play: () => void;
   pause: () => void;
   togglePlayPause: () => void;
-  playNext: () => void;
+  playNext: (isAuto?: boolean) => void;
   playPrevious: () => void;
   setVolume: (volume: number) => void;
   setProgress: (progress: number) => void;
@@ -70,6 +71,7 @@ export const usePlayerStore = create<PlayerState>()(
       lyrics: null,
       isLyricsLoading: false,
       showLyrics: false,
+      isCaching: null,
       downloadingSongs: new Set(),
 
       toggleDownload: async (song: Song) => {
@@ -79,7 +81,6 @@ export const usePlayerStore = create<PlayerState>()(
         if (await OfflineService.isDownloaded(song.id)) {
           await OfflineService.removeDownload(song.id);
           toast.success('Descarga eliminada');
-          // Refresh state
           set({ downloadingSongs: new Set(get().downloadingSongs) });
           return;
         }
@@ -144,7 +145,18 @@ export const usePlayerStore = create<PlayerState>()(
             if (response.status === 200 && response.data.url) {
               if (get().currentSong?.id === song.id) {
                 audioEngine.loadSong(song, startSeconds, get().isPlaying, response.data.url);
-                OfflineService.cacheSong(song);
+                
+                // Aggressive cache
+                set({ isCaching: song.id });
+                OfflineService.cacheSong(song).then(() => {
+                  if (get().isCaching === song.id) {
+                    set({ isCaching: null });
+                    toast.success('Canción en caché', { 
+                      description: 'Puedes salir de la app, seguirá sonando.',
+                      duration: 3000
+                    });
+                  }
+                }).catch(() => set({ isCaching: null }));
               }
             }
           } catch (e) {
@@ -190,7 +202,18 @@ export const usePlayerStore = create<PlayerState>()(
             if (response.status === 200 && response.data.url) {
               if (get().currentSong?.id === song.id) {
                 audioEngine.loadSong(song, startSeconds, get().isPlaying, response.data.url);
-                OfflineService.cacheSong(song);
+                
+                // Aggressive cache
+                set({ isCaching: song.id });
+                OfflineService.cacheSong(song).then(() => {
+                  if (get().isCaching === song.id) {
+                    set({ isCaching: null });
+                    toast.success('Canción en caché', { 
+                      description: 'Puedes salir de la app, seguirá sonando.',
+                      duration: 3000
+                    });
+                  }
+                }).catch(() => set({ isCaching: null }));
               }
             }
           } catch (e) {
@@ -241,12 +264,11 @@ export const usePlayerStore = create<PlayerState>()(
         }
       },
 
-      playNext: () => {
+      playNext: (isAuto: boolean = false) => {
         const { currentSong, queue, isShuffle, repeatMode } = get();
         if (!currentSong || queue.length === 0) return;
 
-        // Repeat One handling
-        if (repeatMode === 'one') {
+        if (isAuto && repeatMode === 'one') {
           get().seekTo(0);
           get().play();
           return;
@@ -256,7 +278,6 @@ export const usePlayerStore = create<PlayerState>()(
         let nextIndex = -1;
 
         if (isShuffle && queue.length > 1) {
-          // Pick a random song that isn't the current one
           do {
             nextIndex = Math.floor(Math.random() * queue.length);
           } while (nextIndex === currentIndex);
@@ -278,7 +299,6 @@ export const usePlayerStore = create<PlayerState>()(
         const { currentSong, queue, progress, repeatMode, isShuffle } = get();
         if (!currentSong || queue.length === 0) return;
 
-        // Standard music player behavior: if song > 3s, restart it
         if (progress > 3) {
           get().seekTo(0);
           return;
@@ -319,25 +339,22 @@ export const usePlayerStore = create<PlayerState>()(
       },
       setIsNowPlayingOpen: (isOpen: boolean) => set({ isNowPlayingOpen: isOpen }),
 
-      syncState: () => {
+      syncState: async () => {
         set({
           progress: audioEngine.getCurrentTime(),
           duration: audioEngine.getDuration(),
-          isPlaying: audioEngine.getPlayerState() === 1
+          isPlaying: await audioEngine.isPlayingNative()
         });
       },
 
       fetchLyrics: async (song: Song) => {
         set({ isLyricsLoading: true });
         try {
-          // 1. First check if we have them saved locally (User's manual choice or previously cached)
           const localData = await LibraryService.getLyrics(song.id);
           let data = localData;
 
-          // 2. ONLY if not in DB, fetch from API automatically
           if (!data) {
             data = await lyricsService.getLyrics(song.artistName, song.title, song.duration);
-            // Optionally we could cache automatically fetched lyrics here too
             if (data) {
               await LibraryService.saveLyrics(song.id, data);
             }
@@ -363,7 +380,6 @@ export const usePlayerStore = create<PlayerState>()(
       updateLyrics: async (data: LyricsData) => {
         const { currentSong } = get();
         if (currentSong) {
-          // Persist the choice for this song ID immediately
           await LibraryService.saveLyrics(currentSong.id, data);
           toast.success('Letra guardada para esta canción');
         }
@@ -384,7 +400,6 @@ export const usePlayerStore = create<PlayerState>()(
     {
       name: 'chrismusic-player-storage',
       storage: createJSONStorage(() => localStorage),
-      // Only persist these fields
       partialize: (state) => ({
         currentSong: state.currentSong,
         queue: state.queue,
@@ -395,7 +410,6 @@ export const usePlayerStore = create<PlayerState>()(
         repeatMode: state.repeatMode,
         showLyrics: state.showLyrics,
       }),
-      // On rehydrate, ensure we aren't "playing" automatically to avoid browser block
       onRehydrateStorage: () => (state) => {
         if (state) state.isPlaying = false;
       },

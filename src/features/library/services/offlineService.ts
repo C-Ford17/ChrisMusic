@@ -1,6 +1,21 @@
 import { db, type OfflineSong, type LocalSong } from '@/core/db/db';
 import { type Song } from '@/core/types/music';
 import { LibraryService } from './libraryService';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+
+// Helper to convert blob to base64 for Filesystem
+const blobToBase64 = (blob: Blob): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64String = (reader.result as string).split(',')[1];
+      resolve(base64String);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+};
 
 export const OfflineService = {
   async isDownloaded(songId: string): Promise<boolean> {
@@ -17,6 +32,10 @@ export const OfflineService = {
         const { convertFileSrc } = await import('@tauri-apps/api/core');
         return convertFileSrc(offlineSong.filePath);
       }
+      
+      if (Capacitor.isNativePlatform()) {
+        return Capacitor.convertFileSrc(offlineSong.filePath);
+      }
     }
 
     if (offlineSong.audioBlob) {
@@ -30,9 +49,15 @@ export const OfflineService = {
     const cachedSong = await db.cachedSongs.get(songId);
     if (!cachedSong) return null;
     
-    if (cachedSong.filePath && typeof window !== 'undefined' && (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
-      const { convertFileSrc } = await import('@tauri-apps/api/core');
-      return convertFileSrc(cachedSong.filePath);
+    if (cachedSong.filePath) {
+      if (typeof window !== 'undefined' && (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
+        const { convertFileSrc } = await import('@tauri-apps/api/core');
+        return convertFileSrc(cachedSong.filePath);
+      }
+
+      if (Capacitor.isNativePlatform()) {
+        return Capacitor.convertFileSrc(cachedSong.filePath);
+      }
     }
 
     if (cachedSong.audioBlob) {
@@ -95,16 +120,30 @@ export const OfflineService = {
         console.log(`[OfflineService] Binary data received, converting to Blob...`);
         // Capacitor returns base64 string for 'blob' responseType
         const base64Data = audioRes.data;
-        const blob = await fetch(`data:audio/mp4;base64,${base64Data}`).then(res => res.blob());
         
-        console.log(`[OfflineService] Saving to IndexedDB...`);
-        await db.offlineSongs.put({
-          id: song.id,
-          song: song as LocalSong,
-          audioBlob: blob,
-          downloadedAt: Date.now()
-        });
-        console.log(`[OfflineService] Successfully saved to IndexedDB.`);
+        if (Capacitor.isNativePlatform()) {
+          const fileName = `offline_${song.id}.m4a`;
+          const saveResult = await Filesystem.writeFile({
+            path: fileName,
+            data: base64Data,
+            directory: Directory.Data
+          });
+
+          await db.offlineSongs.put({
+            id: song.id,
+            song: song as LocalSong,
+            filePath: saveResult.uri,
+            downloadedAt: Date.now()
+          });
+        } else {
+          const blob = await fetch(`data:audio/mp4;base64,${base64Data}`).then(res => res.blob());
+          await db.offlineSongs.put({
+            id: song.id,
+            song: song as LocalSong,
+            audioBlob: blob,
+            downloadedAt: Date.now()
+          });
+        }
       }
 
       // Step 3: Lyrics
@@ -171,15 +210,32 @@ export const OfflineService = {
 
           if (audioRes.status === 200) {
             const base64Data = audioRes.data;
-            const blob = await fetch(`data:audio/mp4;base64,${base64Data}`).then(res => res.blob());
             
-            await db.cachedSongs.put({
-              id: song.id,
-              song: song as LocalSong,
-              audioBlob: blob,
-              cachedAt: Date.now()
-            });
-            return 'blob';
+            if (Capacitor.isNativePlatform()) {
+              const fileName = `cache_${song.id}.m4a`;
+              const saveResult = await Filesystem.writeFile({
+                path: fileName,
+                data: base64Data,
+                directory: Directory.Cache
+              });
+
+              await db.cachedSongs.put({
+                id: song.id,
+                song: song as LocalSong,
+                filePath: saveResult.uri,
+                cachedAt: Date.now()
+              });
+              return saveResult.uri;
+            } else {
+              const blob = await fetch(`data:audio/mp4;base64,${base64Data}`).then(res => res.blob());
+              await db.cachedSongs.put({
+                id: song.id,
+                song: song as LocalSong,
+                audioBlob: blob,
+                cachedAt: Date.now()
+              });
+              return 'blob';
+            }
           }
         }
       } catch (e) {

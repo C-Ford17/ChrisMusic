@@ -7,7 +7,6 @@ import {
   ChevronDown, ListMusic, Repeat, Repeat1, Plus, X, Mic2,
   Download, Check, Loader2
 } from 'lucide-react';
-import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/core/db/db';
@@ -16,6 +15,7 @@ import { AddToPlaylistModal } from '@/shared/components/AddToPlaylistModal';
 import { VolumeControl } from './VolumeControl';
 import { LyricsPanel } from '@/features/lyrics/components/LyricsPanel';
 import { MarqueeText } from '@/shared/components/MarqueeText';
+import Image from 'next/image';
 
 function formatTime(seconds: number) {
   if (!seconds || isNaN(seconds)) return '0:00';
@@ -37,16 +37,14 @@ export function PlayerOverlay() {
 
   const [showQueue, setShowQueue] = useState(false);
 
-  // Global periodic timer to update playback progress
   useEffect(() => {
     const interval = setInterval(() => {
       syncState();
-    }, 500); // Update every 500ms
+    }, 500);
 
     return () => clearInterval(interval);
   }, [syncState]);
 
-  // Check if current song is in favorites
   const isFavorite = useLiveQuery(
     () => db.favorites.where('id').equals(currentSong?.id || '').count(),
     [currentSong?.id]
@@ -87,7 +85,6 @@ export function PlayerOverlay() {
             className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] left-2 right-2 sm:bottom-0 sm:left-0 sm:right-0 sm:w-full sm:rounded-none sm:h-24 bg-white/95 dark:bg-[#181818]/95 sm:bg-white sm:dark:bg-[#181818] backdrop-blur-xl border border-black/5 dark:border-white/10 sm:border-x-0 sm:border-b-0 rounded-2xl p-2 sm:px-6 flex items-center shadow-2xl sm:shadow-none z-50 cursor-pointer overflow-hidden transition-colors duration-300"
             onClick={() => setIsNowPlayingOpen(true)}
           >
-            {/* Mobile Background Progress Bar */}
             <div 
               className="absolute left-0 top-0 bottom-0 bg-[#7C3AED]/5 pointer-events-none z-0 transition-all duration-300" 
               style={{ width: `${progressPercent}%` }} 
@@ -103,7 +100,6 @@ export function PlayerOverlay() {
               <p className="text-gray-500 dark:text-gray-400 text-xs sm:text-sm truncate font-medium">{currentSong.artistName}</p>
             </div>
             
-            {/* Desktop Center Controls */}
             <div className="hidden sm:flex flex-1 flex-col justify-center items-center gap-2 max-w-2xl mx-auto px-4" onClick={(e) => e.stopPropagation()}>
                <div className="flex items-center gap-8">
                  <button onClick={playPrevious} className="text-gray-400 hover:text-[#7C3AED] transition-all active:scale-90"><SkipBack size={22} fill="currentColor" /></button>
@@ -113,7 +109,7 @@ export function PlayerOverlay() {
                  >
                     {isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" className="ml-1" />}
                  </button>
-                 <button onClick={playNext} className="text-gray-400 hover:text-[#7C3AED] transition-all active:scale-90"><SkipForward size={22} fill="currentColor" /></button>
+                 <button onClick={() => playNext()} className="text-gray-400 hover:text-[#7C3AED] transition-all active:scale-90"><SkipForward size={22} fill="currentColor" /></button>
                </div>
                
                <div className="w-full flex items-center gap-3 text-[11px] text-gray-400 font-bold tracking-tighter group">
@@ -133,9 +129,7 @@ export function PlayerOverlay() {
                </div>
             </div>
 
-             {/* Desktop Right */}
              <div className="hidden sm:flex items-center gap-4 min-w-[240px] justify-end" onClick={(e) => e.stopPropagation()}>
-                {/* Volume Button & Slider (Desktop only) */}
                 <div className="hidden lg:flex items-center gap-4 bg-black/2 dark:bg-white/3 border border-black/5 dark:border-white/5 p-3 rounded-2xl">
                   <VolumeControl />
                 </div>
@@ -177,40 +171,60 @@ export function PlayerOverlay() {
             className="fixed inset-0 z-100 bg-white dark:bg-[#0A0A0A] sm:bg-white/95 sm:dark:bg-[#0A0A0A]/95 sm:backdrop-blur-3xl flex justify-center overflow-hidden transition-colors duration-500"
           >
             <div className="w-full h-full flex flex-col xl:max-w-7xl xl:px-8">
-              {/* Header */}
               <div className="flex items-center justify-between p-4 pb-0 pt-6">
                 <button onClick={() => setIsNowPlayingOpen(false)} className="p-2 -ml-2 text-black/40 dark:text-white/70 hover:text-black dark:hover:text-white transition-colors"><ChevronDown size={32} /></button>
                 <span className="text-[10px] font-black tracking-[0.3em] text-[#7C3AED] uppercase">Ahora Suena</span>
                 <div className="w-10" />
               </div>
 
-              {/* Main Content */}
-              <div className="flex-1 flex flex-col md:flex-row gap-8 md:gap-16 px-8 md:px-0 py-6 overflow-hidden items-center md:items-start">
+              <div className="flex-1 flex flex-col md:flex-row gap-6 md:gap-16 px-4 md:px-0 py-2 sm:py-6 overflow-hidden items-center md:items-start relative">
                 
-                {/* Left: Player Core */}
-                <div className="flex-1 flex flex-col w-full max-w-[400px] md:max-w-none md:justify-center h-full">
-                  <div className={`w-full ${showLyrics ? 'h-full flex-1' : 'aspect-square max-w-[500px] mx-auto'} bg-gradient-to-br from-[#7C3AED] to-black/20 dark:to-black rounded-3xl relative shadow-2xl overflow-hidden mb-8 group flex items-center justify-center border border-black/5 dark:border-white/5`}>
+                <div className="flex-1 flex flex-col w-full max-w-[400px] md:max-w-none md:justify-center h-full min-h-0">
+                  <div className={`w-full ${showLyrics || (showQueue) ? 'h-full flex-1' : 'aspect-square max-w-[500px] mx-auto'} bg-gradient-to-br from-[#7C3AED] to-black/20 dark:to-black rounded-3xl relative shadow-2xl overflow-hidden mb-4 sm:mb-8 group flex items-center justify-center border border-black/5 dark:border-white/5 transition-all duration-300`}>
                     <AnimatePresence mode="wait">
-                      {showLyrics ? (
+                      {(showQueue) ? (
+                        <motion.div key="queue-central" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-20">
+                           <div className="md:hidden h-full w-full bg-white dark:bg-[#0A0A0A] p-6 flex flex-col">
+                              <div className="flex justify-between items-center mb-6 shrink-0">
+                                <h3 className="font-black text-xl text-black dark:text-white flex items-center gap-3 tracking-tighter"><ListMusic className="text-[#7C3AED]" size={24} /> Siguiente</h3>
+                                <button onClick={() => setShowQueue(false)} className="p-2 bg-black/5 dark:bg-white/5 rounded-xl text-black/40 dark:text-white/50 hover:text-red-500 transition-colors"><X size={18} /></button>
+                              </div>
+                              <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar pb-safe">
+                                {queue.map((song, idx) => (
+                                  <div key={`${song.id}-${idx}`} className={`flex items-center justify-between p-3 rounded-xl transition-all ${currentSong.id === song.id ? 'bg-[#7C3AED]/10' : 'bg-black/2 dark:bg-white/2 hover:bg-black/5 dark:hover:bg-white/5'}`} onClick={() => playFromQueue(idx)}>
+                                    <div className="flex items-center min-w-0">
+                                      <div className="relative w-10 h-10 mr-3 shrink-0 bg-gray-200 dark:bg-black rounded-lg overflow-hidden shadow-sm"><Image src={song.thumbnailUrl} alt={song.title} fill sizes="40px" className="object-cover" /></div>
+                                      <div className="min-w-0">
+                                        <h4 className={`text-[11px] font-bold truncate ${currentSong.id === song.id ? 'text-[#7C3AED]' : 'text-black dark:text-white'}`}>{song.title}</h4>
+                                        <p className="text-black/40 dark:text-white/40 text-[9px] truncate font-bold">{song.artistName}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                           </div>
+                           <div className="hidden md:block h-full w-full relative">
+                              {showLyrics ? <LyricsPanel /> : (
+                                <>
+                                  <Image src={currentSong.thumbnailUrl} alt={currentSong.title} fill sizes="(min-width: 768px) 500px, 100vw" className="object-cover opacity-90" />
+                                  <div className="absolute inset-0 bg-linear-to-t from-black/20 to-transparent" />
+                                </>
+                              )}
+                           </div>
+                        </motion.div>
+                      ) : showLyrics ? (
                         <motion.div key="lyrics" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-10 bg-white/40 dark:bg-black/40 backdrop-blur-md">
                           <LyricsPanel />
                         </motion.div>
                       ) : (
                         <motion.div key="art" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0">
                           <Image src={currentSong.thumbnailUrl} alt={currentSong.title} fill sizes="(min-width: 768px) 500px, 100vw" className="object-cover opacity-90 transition-transform duration-700 group-hover:scale-110" />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
-                          {/* Background Art with Blur */}
-                          <div className="absolute inset-0 z-0 opacity-40 dark:opacity-20 pointer-events-none">
-                            <div 
-                              className="absolute inset-0 blur-[120px] scale-150 bg-linear-to-br from-[#7C3AED] via-transparent to-indigo-900"
-                            />
-                          </div>
+                          <div className="absolute inset-0 bg-linear-to-t from-black/20 to-transparent" />
                         </motion.div>
                       )}
                     </AnimatePresence>
                   </div>
 
-                  {/* Desktop Metadata & Controls */}
                   <div className="hidden md:block w-full max-w-2xl mx-auto">
                     <div className="flex justify-between items-center mb-6">
                       <div className="flex-1 min-w-0 pr-4">
@@ -253,7 +267,6 @@ export function PlayerOverlay() {
                       </div>
                     </div>
 
-                    {/* Desktop Master Bar */}
                     <div className="flex items-center justify-between mt-4">
                       <div className="w-1/4 flex justify-start"><VolumeControl /></div>
                       <div className="flex items-center gap-10">
@@ -262,7 +275,7 @@ export function PlayerOverlay() {
                         <button onClick={togglePlayPause} className="w-20 h-20 bg-black dark:bg-white text-white dark:text-black rounded-full flex items-center justify-center shadow-2xl hover:scale-110 active:scale-90 transition-all">
                           {isPlaying ? <Pause size={32} fill="currentColor" /> : <Play size={32} fill="currentColor" className="ml-1" />}
                         </button>
-                        <button onClick={playNext} className="text-black dark:text-white hover:text-[#7C3AED] transition-all"><SkipForward size={36} fill="currentColor" /></button>
+                        <button onClick={() => playNext()} className="text-black dark:text-white hover:text-[#7C3AED] transition-all"><SkipForward size={36} fill="currentColor" /></button>
                         <button onClick={toggleRepeatMode} className={`transition-all hover:scale-110 ${repeatMode !== 'off' ? 'text-[#7C3AED]' : 'text-black/20 dark:text-white/40 hover:text-black dark:hover:text-white'}`}>
                           {repeatMode === 'one' ? <Repeat1 size={24} /> : <Repeat size={24} />}
                         </button>
@@ -275,10 +288,9 @@ export function PlayerOverlay() {
                   </div>
                 </div>
 
-                {/* Queue column (Desktop) */}
                 <AnimatePresence>
                   {showQueue && (
-                    <motion.div initial={{ x: 300, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 300, opacity: 0 }} className="relative w-1/3 min-w-[380px] bg-black/[0.02] dark:bg-white/[0.03] backdrop-blur-xl rounded-[40px] p-8 border border-black/5 dark:border-white/5 flex flex-col h-full overflow-hidden shadow-2xl">
+                    <motion.div initial={{ x: 300, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 300, opacity: 0 }} className="hidden md:flex relative w-1/3 min-w-[380px] bg-black/[0.02] dark:bg-white/[0.03] backdrop-blur-xl rounded-[40px] p-8 border border-black/5 dark:border-white/5 flex-col h-full overflow-hidden shadow-2xl">
                       <div className="flex justify-between items-center mb-8 shrink-0">
                         <h3 className="font-black text-2xl text-black dark:text-white flex items-center gap-4 tracking-tighter"><ListMusic className="text-[#7C3AED]" size={28} /> Siguiente</h3>
                         <button onClick={() => setShowQueue(false)} className="p-3 bg-black/5 dark:bg-white/5 rounded-2xl text-black/40 dark:text-white/50 hover:text-red-500 transition-all"><X size={20} /></button>
@@ -303,8 +315,7 @@ export function PlayerOverlay() {
                   )}
                 </AnimatePresence>
 
-                {/* Mobile Metadata & Controls */}
-                <div className="md:hidden w-full flex flex-col mt-auto gap-8 mb-4">
+                <div className="md:hidden w-full flex flex-col mt-auto gap-3 sm:gap-8 mb-4">
                   <div className="flex justify-between items-center px-2">
                     <div className="flex-1 min-w-0 pr-6">
                       <h2 className="text-2xl font-black text-black dark:text-white overflow-hidden tracking-tight">
@@ -338,7 +349,7 @@ export function PlayerOverlay() {
                   <div className="flex items-center justify-center gap-10">
                     <button onClick={playPrevious} className="text-black dark:text-white"><SkipBack size={40} fill="currentColor" /></button>
                     <button onClick={togglePlayPause} className="w-20 h-20 bg-black dark:bg-white text-white dark:text-black rounded-full flex items-center justify-center shadow-xl">{isPlaying ? <Pause size={36} fill="currentColor" /> : <Play size={36} fill="currentColor" className="ml-1" />}</button>
-                    <button onClick={playNext} className="text-black dark:text-white"><SkipForward size={40} fill="currentColor" /></button>
+                    <button onClick={() => playNext()} className="text-black dark:text-white"><SkipForward size={40} fill="currentColor" /></button>
                   </div>
                   <div className="flex justify-between items-center px-4 mt-4 pb-safe">
                     <button onClick={toggleShuffle} className={`p-2 transition-all ${isShuffle ? 'text-[#7C3AED]' : 'text-black/20 dark:text-white/40'}`}><Shuffle size={24} /></button>

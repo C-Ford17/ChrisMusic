@@ -24,6 +24,7 @@ def search():
         'extract_flat': True,
         'skip_download': True,
         'no_warnings': True,
+        'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
     }
     
     try:
@@ -57,6 +58,7 @@ def stream():
         'quiet': True,
         'format': 'bestaudio[ext=m4a]/bestaudio/best',
         'no_warnings': True,
+        'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
     }
     
     try:
