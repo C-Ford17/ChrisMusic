@@ -9,12 +9,14 @@ interface SettingsState {
   autoplay: boolean;
   audioQuality: AudioQuality;
   isForcedOffline: boolean;
+  isDebugMode: boolean;
   
   // Actions
   setTheme: (theme: ThemeMode) => void;
   setAutoplay: (autoplay: boolean) => void;
   setAudioQuality: (quality: AudioQuality) => void;
   setForcedOffline: (offline: boolean) => void;
+  setDebugMode: (debug: boolean) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -24,11 +26,13 @@ export const useSettingsStore = create<SettingsState>()(
       autoplay: true,
       audioQuality: 'high',
       isForcedOffline: false,
+      isDebugMode: false,
 
       setTheme: (theme) => set({ theme }),
       setAutoplay: (autoplay) => set({ autoplay }),
       setAudioQuality: (audioQuality) => set({ audioQuality }),
       setForcedOffline: (isForcedOffline) => set({ isForcedOffline }),
+      setDebugMode: (isDebugMode) => set({ isDebugMode }),
     }),
     {
       name: 'chrismusic-settings-storage',

@@ -4,7 +4,7 @@ import {
   ChevronLeft, Trash2, Download, Upload, 
   Info, ShieldCheck, Github, ExternalLink,
   Moon, Sun, Monitor, PlayCircle, Music2,
-  HardDrive, Sparkles, WifiOff
+  HardDrive, Sparkles, WifiOff, Bug, DatabaseZap
 } from 'lucide-react';
 import Link from 'next/link';
 import { LibraryService } from '@/features/library/services/libraryService';
@@ -12,12 +12,14 @@ import { useSettingsStore, type AudioQuality, type ThemeMode } from '@/features/
 import { useTheme } from 'next-themes';
 import { toast } from 'sonner';
 import { InstallButton } from '@/components/InstallButton';
+import { db } from '@/core/db/db';
 
 export default function SettingsPage() {
   const { 
     theme: storeTheme, setTheme: setStoreTheme, 
     autoplay, setAutoplay, audioQuality, setAudioQuality,
-    isForcedOffline, setForcedOffline
+    isForcedOffline, setForcedOffline,
+    isDebugMode, setDebugMode
   } = useSettingsStore();
   const { theme, setTheme } = useTheme();
 
@@ -66,6 +68,13 @@ export default function SettingsPage() {
     if (confirm('¿Estás seguro de que quieres borrar todo el historial?')) {
       await LibraryService.clearHistory();
       toast.success('Historial borrado');
+    }
+  };
+
+  const handleClearCache = async () => {
+    if (confirm('¿Limpiar caché temporal? (Las descargas permanentes NO se borran)')) {
+      await db.cachedSongs.clear();
+      toast.success('Caché limpiado', { description: 'Las descargas permanentes están intactas.' });
     }
   };
 
@@ -234,7 +243,22 @@ export default function SettingsPage() {
               <input type="file" accept=".json" className="hidden" onChange={handleImport} />
             </label>
 
-            <button 
+            <button
+              onClick={handleClearCache}
+              className="w-full flex items-center justify-between p-8 hover:bg-amber-500/10 transition-all text-left border-t border-black/5 dark:border-white/5 group"
+            >
+              <div className="flex items-center gap-5 text-amber-500">
+                <div className="p-4 bg-amber-500/10 rounded-2xl group-hover:bg-amber-500 group-hover:text-white transition-all">
+                  <DatabaseZap size={24} />
+                </div>
+                <div>
+                  <p className="font-black text-lg tracking-tight">Limpiar Caché</p>
+                  <p className="text-sm font-bold text-amber-500/50 mt-0.5 uppercase tracking-widest text-[10px]">No borra descargas permanentes</p>
+                </div>
+              </div>
+            </button>
+
+            <button
               onClick={handleClearHistory}
               className="w-full flex items-center justify-between p-8 hover:bg-red-500/10 transition-all text-left border-t border-black/5 dark:border-white/5 group"
             >
@@ -251,7 +275,33 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        {/* Acerca de */}
+      {/* Desarrollador */}
+      <section className="animate-in fade-in slide-in-from-bottom-10 duration-1000">
+        <h2 className="text-xs font-black text-orange-400 uppercase tracking-[0.2em] mb-5 px-3 flex items-center gap-3">
+          <Bug size={16} /> Desarrollador
+        </h2>
+        <div className="bg-black/5 dark:bg-white/5 rounded-[32px] overflow-hidden border border-black/10 dark:border-white/10 shadow-sm">
+          <div
+            className="flex items-center justify-between p-8 hover:bg-white dark:hover:bg-white/2 transition-all cursor-pointer group"
+            onClick={() => setDebugMode(!isDebugMode)}
+          >
+            <div className="flex items-center gap-5">
+              <div className="p-4 bg-orange-400/10 text-orange-400 rounded-2xl group-hover:scale-110 transition-transform">
+                <Bug size={24} />
+              </div>
+              <div>
+                <p className="font-black text-lg text-black/80 dark:text-white/90 tracking-tight">Modo Debug</p>
+                <p className="text-sm font-bold text-black/30 dark:text-white/40 mt-0.5">Mostrar info técnica en reproductor</p>
+              </div>
+            </div>
+            <div className={`w-14 h-7 rounded-full transition-all relative p-1 ${isDebugMode ? 'bg-orange-400 shadow-inner' : 'bg-black/10 dark:bg-white/10'}`}>
+              <div className={`w-5 h-5 bg-white rounded-full shadow-lg transition-all transform ${isDebugMode ? 'translate-x-7' : 'translate-x-0'}`} />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Acerca de */}
         <section className="animate-in fade-in slide-in-from-bottom-10 duration-1000">
           <h2 className="text-xs font-black text-black/40 dark:text-white/20 uppercase tracking-[0.2em] mb-5 px-3">Información</h2>
           <div className="bg-black/5 dark:bg-white/5 rounded-[32px] overflow-hidden border border-black/10 dark:border-white/10 shadow-sm">

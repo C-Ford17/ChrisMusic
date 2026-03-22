@@ -2,16 +2,18 @@
 
 import { useState } from 'react';
 import { usePlayerStore } from '@/features/player/store/playerStore';
-import { ListPlus, Play, Clock, Sparkles } from 'lucide-react';
+import { ListPlus, Play, Clock, Sparkles, Trash2, X } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/core/db/db';
 import Image from 'next/image';
 import { type Song } from '@/core/types/music';
 import { AddToPlaylistModal } from '@/shared/components/AddToPlaylistModal';
+import { toast } from 'sonner';
 
 export default function Home() {
   const [selectedSong, setSelectedSong] = useState<Song | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [swipedId, setSwipedId] = useState<number | null>(null);
   
   const { playSong } = usePlayerStore();
 
@@ -20,6 +22,18 @@ export default function Home() {
     () => db.history.orderBy('playedAt').reverse().limit(10).toArray(),
     []
   );
+
+  const handleClearHistory = async () => {
+    if (confirm('¿Borrar todo el historial reciente?')) {
+      await db.history.clear();
+      toast.success('Historial borrado');
+    }
+  };
+
+  const handleDeleteItem = async (id: number) => {
+    await db.history.delete(id);
+    setSwipedId(null);
+  };
 
   return (
     <div className="flex flex-col min-h-screen pt-safe">
@@ -51,6 +65,15 @@ export default function Home() {
               <Clock size={16} />
               Recientemente Escuchado
             </h2>
+            {recentHistory && recentHistory.length > 0 && (
+              <button
+                onClick={handleClearHistory}
+                className="flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-red-400 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
+              >
+                <Trash2 size={14} />
+                Limpiar
+              </button>
+            )}
           </div>
 
           {!recentHistory || recentHistory.length === 0 ? (
@@ -66,30 +89,63 @@ export default function Home() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {recentHistory.map((item) => (
-                <div 
-                  key={item.id} 
-                  className="flex items-center p-4 rounded-[28px] bg-black/[0.02] dark:bg-white/[0.02] hover:bg-white dark:hover:bg-white/5 border border-black/5 dark:border-white/5 cursor-pointer transition-all group active:scale-[0.98] shadow-sm hover:shadow-xl"
-                  onClick={() => playSong(item.song as Song)}
+                <div
+                  key={item.id}
+                  className="relative overflow-hidden rounded-[28px]"
                 >
-                  <div className="relative w-14 h-14 mr-5 shrink-0 bg-gray-200 dark:bg-gray-800 rounded-2xl overflow-hidden shadow-md">
-                    <Image src={item.song.thumbnailUrl} alt={item.song.title} fill sizes="56px" className="object-cover group-hover:scale-110 transition-transform duration-500" />
-                  </div>
-                  <div className="flex-1 min-w-0 mr-4 text-left">
-                    <h3 className="text-black dark:text-white font-black truncate group-hover:text-[#7C3AED] transition-colors tracking-tight text-lg">{item.song.title}</h3>
-                    <p className="text-gray-500 dark:text-gray-400 text-xs font-bold truncate mt-1 uppercase tracking-wider">{item.song.artistName}</p>
-                  </div>
-                  <div className="flex gap-2 shrink-0">
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedSong(item.song as Song);
-                        setIsModalOpen(true);
-                      }}
-                      className="w-10 h-10 flex items-center justify-center bg-black/5 dark:bg-white/5 text-gray-400 hover:text-[#7C3AED] hover:bg-[#7C3AED]/10 rounded-xl transition-all"
-                      title="Añadir a playlist"
+                  {/* Delete reveal layer */}
+                  <div
+                    className={`absolute inset-0 bg-red-500 flex items-center justify-end pr-6 transition-opacity duration-200 ${swipedId === item.id ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                  >
+                    <button
+                      onClick={() => handleDeleteItem(item.id!)}
+                      className="flex items-center gap-2 text-white font-black text-sm uppercase tracking-wider"
                     >
-                      <ListPlus size={20} />
+                      <X size={20} />
+                      Eliminar
                     </button>
+                  </div>
+
+                  {/* Main row */}
+                  <div
+                    className={`flex items-center p-4 bg-black/[0.02] dark:bg-white/[0.02] hover:bg-white dark:hover:bg-white/5 border border-black/5 dark:border-white/5 cursor-pointer transition-all group active:scale-[0.98] shadow-sm hover:shadow-xl rounded-[28px] ${swipedId === item.id ? '-translate-x-24' : 'translate-x-0'} transition-transform duration-300`}
+                    onClick={() => {
+                      if (swipedId === item.id) { setSwipedId(null); return; }
+                      playSong(item.song as Song);
+                    }}
+                    onTouchStart={() => {}}
+                    onContextMenu={(e) => { e.preventDefault(); setSwipedId(swipedId === item.id ? null : item.id!); }}
+                  >
+                    <div className="relative w-14 h-14 mr-5 shrink-0 bg-gray-200 dark:bg-gray-800 rounded-2xl overflow-hidden shadow-md">
+                      <Image src={item.song.thumbnailUrl} alt={item.song.title} fill sizes="56px" className="object-cover group-hover:scale-110 transition-transform duration-500" />
+                    </div>
+                    <div className="flex-1 min-w-0 mr-4 text-left">
+                      <h3 className="text-black dark:text-white font-black truncate group-hover:text-[#7C3AED] transition-colors tracking-tight text-lg">{item.song.title}</h3>
+                      <p className="text-gray-500 dark:text-gray-400 text-xs font-bold truncate mt-1 uppercase tracking-wider">{item.song.artistName}</p>
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSwipedId(swipedId === item.id ? null : item.id!);
+                        }}
+                        className="w-10 h-10 flex items-center justify-center bg-red-500/10 text-red-400 hover:text-red-500 hover:bg-red-500/20 rounded-xl transition-all"
+                        title="Eliminar del historial"
+                      >
+                        <X size={16} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedSong(item.song as Song);
+                          setIsModalOpen(true);
+                        }}
+                        className="w-10 h-10 flex items-center justify-center bg-black/5 dark:bg-white/5 text-gray-400 hover:text-[#7C3AED] hover:bg-[#7C3AED]/10 rounded-xl transition-all"
+                        title="Añadir a playlist"
+                      >
+                        <ListPlus size={20} />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -98,10 +154,10 @@ export default function Home() {
         </section>
       </main>
 
-      <AddToPlaylistModal 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
-        song={selectedSong} 
+      <AddToPlaylistModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        song={selectedSong}
       />
     </div>
   );

@@ -34,7 +34,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
       </main>
       <BottomNav />
       <PlayerOverlay />
-      <Toaster position="bottom-center" />
     </ThemeProvider>
   );
 }

@@ -1,21 +1,6 @@
 import { db, type OfflineSong, type LocalSong } from '@/core/db/db';
 import { type Song } from '@/core/types/music';
 import { LibraryService } from './libraryService';
-import { Capacitor } from '@capacitor/core';
-import { Filesystem, Directory } from '@capacitor/filesystem';
-
-// Helper to convert blob to base64 for Filesystem
-const blobToBase64 = (blob: Blob): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64String = (reader.result as string).split(',')[1];
-      resolve(base64String);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-};
 
 export const OfflineService = {
   async isDownloaded(songId: string): Promise<boolean> {
@@ -31,10 +16,6 @@ export const OfflineService = {
       if (typeof window !== 'undefined' && (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
         const { convertFileSrc } = await import('@tauri-apps/api/core');
         return convertFileSrc(offlineSong.filePath);
-      }
-      
-      if (Capacitor.isNativePlatform()) {
-        return Capacitor.convertFileSrc(offlineSong.filePath);
       }
     }
 
@@ -53,10 +34,6 @@ export const OfflineService = {
       if (typeof window !== 'undefined' && (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
         const { convertFileSrc } = await import('@tauri-apps/api/core');
         return convertFileSrc(cachedSong.filePath);
-      }
-
-      if (Capacitor.isNativePlatform()) {
-        return Capacitor.convertFileSrc(cachedSong.filePath);
       }
     }
 
@@ -95,55 +72,26 @@ export const OfflineService = {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
         const { CapacitorHttp } = await import('@capacitor/core');
         
-        console.log(`[OfflineService] Fetching stream URL from: ${apiUrl}`);
-        // Step 1: Get high quality audio URL from Flask API
-        const streamRes = await CapacitorHttp.get({
-          url: `${apiUrl}/stream`,
-          params: { id: song.id }
-        });
-
-        if (streamRes.status !== 200 || !streamRes.data.url) {
-          throw new Error('Could not get streaming URL from API.');
-        }
-
-        const audioUrl = streamRes.data.url;
-        console.log(`[OfflineService] Audio URL obtained, starting binary download...`);
-
-        // Step 2: Download the audio via CapacitorHttp to bypass CORS
+        console.log(`[OfflineService] Downloading audio from /proxy endpoint...`);
+        // /proxy runs FFmpeg which strips video and gives pure audio
         const audioRes = await CapacitorHttp.get({
-          url: audioUrl,
+          url: `${apiUrl}/proxy?id=${song.id}`,
           responseType: 'blob'
         });
 
-        if (audioRes.status !== 200) throw new Error('Failed to download audio file via native layer.');
+        if (audioRes.status !== 200) throw new Error(`Proxy download failed: HTTP ${audioRes.status}`);
 
         console.log(`[OfflineService] Binary data received, converting to Blob...`);
-        // Capacitor returns base64 string for 'blob' responseType
         const base64Data = audioRes.data;
         
-        if (Capacitor.isNativePlatform()) {
-          const fileName = `offline_${song.id}.m4a`;
-          const saveResult = await Filesystem.writeFile({
-            path: fileName,
-            data: base64Data,
-            directory: Directory.Data
-          });
-
-          await db.offlineSongs.put({
-            id: song.id,
-            song: song as LocalSong,
-            filePath: saveResult.uri,
-            downloadedAt: Date.now()
-          });
-        } else {
-          const blob = await fetch(`data:audio/mp4;base64,${base64Data}`).then(res => res.blob());
-          await db.offlineSongs.put({
-            id: song.id,
-            song: song as LocalSong,
-            audioBlob: blob,
-            downloadedAt: Date.now()
-          });
-        }
+        // Fallback to storing as Blob in all environments (reverted to Strategy Blob)
+        const blob = await fetch(`data:audio/aac;base64,${base64Data}`).then(res => res.blob());
+        await db.offlineSongs.put({
+          id: song.id,
+          song: song as LocalSong,
+          audioBlob: blob,
+          downloadedAt: Date.now()
+        });
       }
 
       // Step 3: Lyrics
@@ -192,51 +140,31 @@ export const OfflineService = {
         console.warn('Tauri Caching failed:', e);
       }
     } else {
-      // Capacitor / Android Caching
+      // Capacitor / Android Caching - uses /proxy to get audio-only AAC blob
       try {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.195:5000";
         const { CapacitorHttp } = await import('@capacitor/core');
         
-        const streamRes = await CapacitorHttp.get({
-          url: `${apiUrl}/stream`,
-          params: { id: song.id }
+        // Download directly from proxy: FFmpeg strips video → safe background blob
+        const audioRes = await CapacitorHttp.get({
+          url: `${apiUrl}/proxy?id=${song.id}`,
+          responseType: 'blob'
         });
 
-        if (streamRes.status === 200 && streamRes.data.url) {
-          const audioRes = await CapacitorHttp.get({
-            url: streamRes.data.url,
-            responseType: 'blob'
+        if (audioRes.status === 200) {
+          const base64Data = audioRes.data;
+          
+          // Blob storage fallback
+          const blob = await fetch(`data:audio/aac;base64,${base64Data}`).then(res => res.blob());
+          await db.cachedSongs.put({
+            id: song.id,
+            song: song as LocalSong,
+            audioBlob: blob,
+            cachedAt: Date.now()
           });
-
-          if (audioRes.status === 200) {
-            const base64Data = audioRes.data;
-            
-            if (Capacitor.isNativePlatform()) {
-              const fileName = `cache_${song.id}.m4a`;
-              const saveResult = await Filesystem.writeFile({
-                path: fileName,
-                data: base64Data,
-                directory: Directory.Cache
-              });
-
-              await db.cachedSongs.put({
-                id: song.id,
-                song: song as LocalSong,
-                filePath: saveResult.uri,
-                cachedAt: Date.now()
-              });
-              return saveResult.uri;
-            } else {
-              const blob = await fetch(`data:audio/mp4;base64,${base64Data}`).then(res => res.blob());
-              await db.cachedSongs.put({
-                id: song.id,
-                song: song as LocalSong,
-                audioBlob: blob,
-                cachedAt: Date.now()
-              });
-              return 'blob';
-            }
-          }
+          return 'blob';
+        } else {
+          console.warn(`[OfflineService] Proxy returned status ${audioRes.status}`);
         }
       } catch (e) {
         console.warn('Capacitor Caching failed:', e);
