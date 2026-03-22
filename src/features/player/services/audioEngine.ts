@@ -109,6 +109,32 @@ class AudioEngine {
     return !!(this.htmlPlayer && this.htmlPlayer.src && this.htmlPlayer.src !== window.location.href && this.htmlPlayer.src !== '');
   }
 
+  public hasLocalSource(): boolean {
+    if (!this.htmlPlayer || !this.htmlPlayer.src) return false;
+    return this.htmlPlayer.src.startsWith('blob:') || this.htmlPlayer.src.includes('localhost');
+  }
+
+  /**
+   * Hot-swap: changes the audio source without calling reset().
+   * Saves the current playback position and resumes from it after load.
+   * There will be a brief (~0.5s) stutter while the new source loads.
+   */
+  public swapSource(newUrl: string, wasPlaying: boolean): void {
+    if (!this.htmlPlayer) return;
+    const savedTime = this.htmlPlayer.currentTime;
+    console.log(`[AudioEngine] Swapping source at ${savedTime.toFixed(2)}s to: ${newUrl.substring(0, 40)}...`);
+    this.htmlPlayer.src = newUrl;
+    this.htmlPlayer.load();
+    const onCanPlay = () => {
+      if (this.htmlPlayer) {
+        this.htmlPlayer.currentTime = savedTime;
+        if (wasPlaying) this.htmlPlayer.play();
+        this.htmlPlayer.removeEventListener('canplay', onCanPlay);
+      }
+    };
+    this.htmlPlayer.addEventListener('canplay', onCanPlay);
+  }
+
 
   public async reset() {
     if (this.htmlPlayer) {

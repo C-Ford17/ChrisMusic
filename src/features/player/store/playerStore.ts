@@ -146,14 +146,22 @@ export const usePlayerStore = create<PlayerState>()(
               if (get().currentSong?.id === song.id) {
                 audioEngine.loadSong(song, startSeconds, get().isPlaying, response.data.url);
                 
-                // Aggressive cache
+                // Aggressive cache + Auto Swap
                 set({ isCaching: song.id });
-                OfflineService.cacheSong(song).then(() => {
+                OfflineService.cacheSong(song).then(async () => {
+                  // Swap to local blob if same song still playing and not already local
+                  if (get().currentSong?.id === song.id && !audioEngine.hasLocalSource()) {
+                    const localUrl = await OfflineService.getCachedUrl(song.id);
+                    if (localUrl) {
+                      console.log('[PlayerStore] Auto Hot-Swap triggered!');
+                      audioEngine.swapSource(localUrl, get().isPlaying);
+                    }
+                  }
                   if (get().isCaching === song.id) {
                     set({ isCaching: null });
-                    toast.success('Canción en caché', { 
-                      description: 'Puedes salir de la app, seguirá sonando.',
-                      duration: 3000
+                    toast.success('✅ Canción en caché', { 
+                      description: 'Cambio automático a modo seguro — ya puedes salir.',
+                      duration: 4000
                     });
                   }
                 }).catch(() => set({ isCaching: null }));
@@ -203,14 +211,22 @@ export const usePlayerStore = create<PlayerState>()(
               if (get().currentSong?.id === song.id) {
                 audioEngine.loadSong(song, startSeconds, get().isPlaying, response.data.url);
                 
-                // Aggressive cache
+                // Aggressive cache + Auto Swap
                 set({ isCaching: song.id });
-                OfflineService.cacheSong(song).then(() => {
+                OfflineService.cacheSong(song).then(async () => {
+                  // Swap to local blob if same song still playing and not already local
+                  if (get().currentSong?.id === song.id && !audioEngine.hasLocalSource()) {
+                    const localUrl = await OfflineService.getCachedUrl(song.id);
+                    if (localUrl) {
+                      console.log('[PlayerStore] Auto Hot-Swap triggered (queue)!');
+                      audioEngine.swapSource(localUrl, get().isPlaying);
+                    }
+                  }
                   if (get().isCaching === song.id) {
                     set({ isCaching: null });
-                    toast.success('Canción en caché', { 
-                      description: 'Puedes salir de la app, seguirá sonando.',
-                      duration: 3000
+                    toast.success('✅ Canción en caché', { 
+                      description: 'Cambio automático a modo seguro — ya puedes salir.',
+                      duration: 4000
                     });
                   }
                 }).catch(() => set({ isCaching: null }));

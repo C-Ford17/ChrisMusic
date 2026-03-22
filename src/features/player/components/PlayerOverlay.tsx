@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { usePlayerStore } from '../store/playerStore';
+import { audioEngine } from '../services/audioEngine';
 import { 
   Play, Pause, SkipForward, SkipBack, Shuffle, Heart, 
   ChevronDown, ListMusic, Repeat, Repeat1, Plus, X, Mic2,
@@ -16,6 +17,7 @@ import { VolumeControl } from './VolumeControl';
 import { LyricsPanel } from '@/features/lyrics/components/LyricsPanel';
 import { MarqueeText } from '@/shared/components/MarqueeText';
 import Image from 'next/image';
+import { useSettingsStore } from '@/features/settings/store/settingsStore';
 
 function formatTime(seconds: number) {
   if (!seconds || isNaN(seconds)) return '0:00';
@@ -34,6 +36,8 @@ export function PlayerOverlay() {
     toggleDownload, downloadingSongs,
     syncState
   } = usePlayerStore();
+
+  const { isDebugMode } = useSettingsStore();
 
   const [showQueue, setShowQueue] = useState(false);
 
@@ -62,6 +66,107 @@ export function PlayerOverlay() {
   const isDownloading = currentSong ? downloadingSongs.has(currentSong.id) : false;
 
   const [isPlaylistModalOpen, setIsPlaylistModalOpen] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
+  const [swipeDeltaX, setSwipeDeltaX] = useState(0);
+  const touchStartX = React.useRef<number | null>(null);
+  const SWIPE_THRESHOLD = 60;
+
+  const handleMiniTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    setSwipeDeltaX(0);
+  };
+
+  const handleMiniTouchMove = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const delta = e.touches[0].clientX - touchStartX.current;
+    setSwipeDeltaX(delta);
+  };
+
+  const handleMiniTouchEnd = () => {
+    if (touchStartX.current === null) return;
+    if (swipeDeltaX > SWIPE_THRESHOLD) {
+      playPrevious();
+    } else if (swipeDeltaX < -SWIPE_THRESHOLD) {
+      playNext();
+    }
+    touchStartX.current = null;
+    setSwipeDeltaX(0);
+  };
+
+  // Show spinner immediately when song changes, clear when audio actually plays.
+  // IMPORTANT: skip if not playing — avoids infinite spinner on app restore.
+  useEffect(() => {
+    if (!currentSong || !isPlaying) { setIsBuffering(false); return; }
+    setIsBuffering(true);
+
+    const el = (audioEngine as unknown as { htmlPlayer?: HTMLAudioElement }).htmlPlayer;
+    if (!el) return;
+    const onPlaying = () => setIsBuffering(false);
+    const onCanPlayThrough = () => setIsBuffering(false);
+    const onWaiting = () => setIsBuffering(true);
+    const onError = () => setIsBuffering(false);
+    el.addEventListener('playing', onPlaying);
+    el.addEventListener('canplaythrough', onCanPlayThrough);
+    el.addEventListener('waiting', onWaiting);
+    el.addEventListener('error', onError);
+    return () => {
+      el.removeEventListener('playing', onPlaying);
+      el.removeEventListener('canplaythrough', onCanPlayThrough);
+      el.removeEventListener('waiting', onWaiting);
+      el.removeEventListener('error', onError);
+    };
+  }, [currentSong, isPlaying]);
+
+
+  const [formats, setFormats] = useState<any[]>([]);
+  const [loadingFormats, setLoadingFormats] = useState(false);
+  const [showFormats, setShowFormats] = useState(false);
+
+  const loadFormats = async () => {
+    if (!currentSong) return;
+    setLoadingFormats(true);
+    setShowFormats(true);
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.195:5000";
+      const { CapacitorHttp } = await import('@capacitor/core');
+      const res = await CapacitorHttp.get({
+        url: `${apiUrl}/formats`,
+        params: { id: currentSong.id }
+      });
+      if (res.status === 200 && res.data.formats) {
+        setFormats(res.data.formats);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingFormats(false);
+    }
+  };
+
+  const inspectLocalBlob = async () => {
+    if (!currentSong) return;
+    try {
+      const offlineSong = await db.offlineSongs.get(currentSong.id);
+      const cachedSong = await db.cachedSongs.get(currentSong.id);
+      const songRecord = offlineSong || cachedSong;
+      
+      if (!songRecord || !songRecord.audioBlob) {
+        alert("Esta canción no está guardada como Blob local.");
+        return;
+      }
+      
+      const blob = songRecord.audioBlob as Blob;
+      const buffer = await blob.slice(0, 100).arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      
+      const hex = Array.from(bytes).slice(0, 32).map(b => b.toString(16).padStart(2, '0')).join(' ');
+      const ascii = Array.from(bytes).slice(0, 32).map(b => (b >= 32 && b <= 126) ? String.fromCharCode(b) : '.').join('');
+
+      alert(`📋 CÓDIGO HEXADECIMAL:\nHEX: ${hex}\n\nASCII: ${ascii}\n\nEnvía una foto de esto!`);
+    } catch(e: any) {
+      alert("Error analizando: " + e.message);
+    }
+  };
 
   const handleToggleFavorite = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -80,10 +185,15 @@ export function PlayerOverlay() {
         {!isNowPlayingOpen && (
           <motion.div 
             initial={{ y: 100, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
+            animate={{ y: 0, opacity: 1, x: swipeDeltaX * 0.4 }}
             exit={{ y: 100, opacity: 0 }}
+            transition={{ x: { type: 'spring', stiffness: 300, damping: 30 } }}
             className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] left-2 right-2 sm:bottom-0 sm:left-0 sm:right-0 sm:w-full sm:rounded-none sm:h-24 bg-white/95 dark:bg-[#181818]/95 sm:bg-white sm:dark:bg-[#181818] backdrop-blur-xl border border-black/5 dark:border-white/10 sm:border-x-0 sm:border-b-0 rounded-2xl p-2 sm:px-6 flex items-center shadow-2xl sm:shadow-none z-50 cursor-pointer overflow-hidden transition-colors duration-300"
+            style={{ touchAction: 'pan-y' }}
             onClick={() => setIsNowPlayingOpen(true)}
+            onTouchStart={handleMiniTouchStart}
+            onTouchMove={handleMiniTouchMove}
+            onTouchEnd={handleMiniTouchEnd}
           >
             <div 
               className="absolute left-0 top-0 bottom-0 bg-[#7C3AED]/5 pointer-events-none z-0 transition-all duration-300" 
@@ -107,7 +217,9 @@ export function PlayerOverlay() {
                     onClick={togglePlayPause}
                     className="w-11 h-11 bg-black dark:bg-white rounded-full flex items-center justify-center text-white dark:text-black hover:scale-110 active:scale-90 transition-all shadow-lg"
                  >
-                    {isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" className="ml-1" />}
+                    {isBuffering
+                      ? <Loader2 size={20} className="animate-spin" />
+                      : isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" className="ml-1" />}
                  </button>
                  <button onClick={() => playNext()} className="text-gray-400 hover:text-[#7C3AED] transition-all active:scale-90"><SkipForward size={22} fill="currentColor" /></button>
                </div>
@@ -155,7 +267,9 @@ export function PlayerOverlay() {
               onClick={(e) => { e.stopPropagation(); togglePlayPause(); }}
               className="relative z-10 sm:hidden w-11 h-11 flex items-center justify-center text-black dark:text-white bg-black/5 dark:bg-white/5 rounded-full"
             >
-              {isPlaying ? <Pause fill="currentColor" size={24} /> : <Play fill="currentColor" size={24} className="ml-1" />}
+              {isBuffering
+                ? <Loader2 size={24} className="animate-spin" />
+                : isPlaying ? <Pause fill="currentColor" size={24} /> : <Play fill="currentColor" size={24} className="ml-1" />}
             </button>
           </motion.div>
         )}
@@ -322,6 +436,17 @@ export function PlayerOverlay() {
                         <MarqueeText text={currentSong.title} />
                       </h2>
                       <p className="text-lg text-black/40 dark:text-white/50 font-bold truncate">{currentSong.artistName}</p>
+                        {isDebugMode && (
+                          <p className="text-xs text-red-500 font-mono mt-2 bg-black/10 dark:bg-white/10 p-2 rounded-lg break-all">
+                            DEBUG SRC: {typeof window !== 'undefined' ? (audioEngine as any).htmlPlayer?.src?.substring(0, 50) + '...' : ''}<br/>
+                            HAS VIDEO FRAME: {typeof window !== 'undefined' && ((audioEngine as any).htmlPlayer as any)?.getVideoPlaybackQuality ? 'SI (Peligro 2do Plano)' : 'NO (Seguro)'}
+                            <br/>
+                          <div className="flex gap-2">
+                            <button onClick={(e) => { e.stopPropagation(); loadFormats(); }} className="mt-1.5 flex-1 bg-[#7C3AED] text-white py-1.5 rounded text-[10px] font-bold uppercase">🔎 Web</button>
+                            <button onClick={(e) => { e.stopPropagation(); inspectLocalBlob(); }} className="mt-1.5 flex-1 bg-red-500 text-white py-1.5 rounded text-[10px] font-bold uppercase">🔬 Local</button>
+                          </div>
+                          </p>
+                        )}
                     </div>
                     <div className="flex gap-4">
                       <button onClick={handleToggleFavorite} className="p-2"><Heart size={28} fill={isFavorite ? "#7C3AED" : "none"} className={isFavorite ? "text-[#7C3AED]" : "text-black/40 dark:text-white/40"} /></button>
@@ -348,7 +473,11 @@ export function PlayerOverlay() {
                   </div>
                   <div className="flex items-center justify-center gap-10">
                     <button onClick={playPrevious} className="text-black dark:text-white"><SkipBack size={40} fill="currentColor" /></button>
-                    <button onClick={togglePlayPause} className="w-20 h-20 bg-black dark:bg-white text-white dark:text-black rounded-full flex items-center justify-center shadow-xl">{isPlaying ? <Pause size={36} fill="currentColor" /> : <Play size={36} fill="currentColor" className="ml-1" />}</button>
+                    <button onClick={togglePlayPause} className="w-20 h-20 bg-black dark:bg-white text-white dark:text-black rounded-full flex items-center justify-center shadow-xl">
+                      {isBuffering
+                        ? <Loader2 size={36} className="animate-spin" />
+                        : isPlaying ? <Pause size={36} fill="currentColor" /> : <Play size={36} fill="currentColor" className="ml-1" />}
+                    </button>
                     <button onClick={() => playNext()} className="text-black dark:text-white"><SkipForward size={40} fill="currentColor" /></button>
                   </div>
                   <div className="flex justify-between items-center px-4 mt-4 pb-safe">
@@ -363,6 +492,55 @@ export function PlayerOverlay() {
                 </div>
 
               </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showFormats && (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowFormats(false)}
+          >
+            <div className="bg-white dark:bg-[#181818] p-6 rounded-3xl w-full max-w-lg max-h-[80vh] flex flex-col shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-bold dark:text-white">Explorador de Formatos</h3>
+                <button onClick={() => setShowFormats(false)}><X size={24} className="dark:text-white/50" /></button>
+              </div>
+              
+              {loadingFormats ? (
+                <div className="flex-1 flex items-center justify-center min-h-[200px]"><Loader2 className="animate-spin text-[#7C3AED]" size={36} /></div>
+              ) : (
+                <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar pb-safe">
+                  {formats.map((f, i) => (
+                    <button 
+                      key={i} 
+                      onClick={() => {
+                         if ((audioEngine as any)?.htmlPlayer) {
+                           (audioEngine as any).htmlPlayer.src = f.url;
+                           (audioEngine as any).htmlPlayer.play();
+                           setShowFormats(false);
+                         }
+                      }}
+                      className="w-full text-left p-4 rounded-2xl bg-black/5 dark:bg-white/5 hover:bg-[#7C3AED]/20 transition-all group border border-black/5 dark:border-white/5"
+                    >
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="font-black text-lg text-[#7C3AED]">{f.format_id}</span>
+                        <span className="text-sm font-bold bg-black/10 dark:bg-white/10 px-2 py-0.5 rounded-md text-black/60 dark:text-white/60">{f.ext}</span>
+                      </div>
+                      <div className="text-xs text-black/60 dark:text-white/60 space-y-1 font-mono">
+                        <p>VCODEC: <strong className={f.vcodec !== 'none' ? 'text-red-500' : 'text-green-500'}>{f.vcodec}</strong></p>
+                        <p>ACODEC: <strong>{f.acodec}</strong></p>
+                        <p>SIZE: <strong>{f.filesize ? (f.filesize / 1024 / 1024).toFixed(2) + ' MB' : 'DASH'}</strong></p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </motion.div>
         )}
