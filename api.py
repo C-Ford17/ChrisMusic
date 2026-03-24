@@ -14,6 +14,46 @@ CORS(app) # Allow CORS for local development
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# --- FUNCIÓN MÁGICA PARA EVADIR EL BLOQUEO DE BOT ---
+def safe_extract(url, base_opts, action="extract"):
+    """
+    Intenta extraer o descargar usando diferentes clientes de YouTube en cascada.
+    Si YouTube bloquea uno asumiendo que es un bot, intenta con el siguiente.
+    """
+    clients = [
+        ['ios', 'android'], 
+        ['tv_embedded', 'web_creator'], 
+        ['mweb'],
+        ['web']
+    ]
+    
+    for client_list in clients:
+        opts = base_opts.copy()
+        opts['extractor_args'] = {'youtube': {'player_client': client_list}}
+        
+        try:
+            logger.info(f"Intentando con cliente(s): {client_list}")
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                if action == "download":
+                    ydl.download([url])
+                    return True
+                else:
+                    info = ydl.extract_info(url, download=False)
+                    logger.info(f"¡Éxito con cliente(s): {client_list}!")
+                    return info
+                    
+        except Exception as e:
+            error_msg = str(e)
+            logger.warning(f"Fallo con {client_list}: {error_msg}")
+            
+            # Si el error NO es sobre el bot/sign in, detenemos el intento
+            # (Ejemplo: si el video es privado o fue borrado)
+            if "Sign in" not in error_msg and "bot" not in error_msg.lower():
+                raise e
+                
+    # Si termina el ciclo y todos fallaron:
+    raise Exception("Todos los clientes fueron bloqueados por YouTube (Bot Error).")
+
 @app.route('/search')
 def search():
     query = request.args.get('q', '')
@@ -30,12 +70,10 @@ def search():
         'extract_flat': True,
         'skip_download': True,
         'no_warnings': True,
-        'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
     }
     
     try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            data = ydl.extract_info(f"ytsearch{fetch_count}:{query}", download=False)
+        data = safe_extract(f"ytsearch{fetch_count}:{query}", opts)
             
         results = []
         for e in data.get('entries', []):
@@ -65,15 +103,10 @@ def stream():
         'quiet': True,
         'no_warnings': True,
         'extract_flat': False,
-        'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
     }
     
     try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(
-                f"https://www.youtube.com/watch?v={video_id}", 
-                download=False
-            )
+        info = safe_extract(f"https://www.youtube.com/watch?v={video_id}", opts)
         return jsonify({'url': info.get('url', '')})
     except Exception as e:
         logger.error(f"Stream error: {str(e)}")
@@ -87,53 +120,43 @@ def proxy():
         
     logger.info(f"Iniciando FFmpeg Proxy (AAC) para: {video_id}")
     opts = {
-        # M4A (AAC) es crucial: allows -acodec copy to ADTS, WEBM/OPUS is incompatible with -f adts
         'format': 'bestaudio[ext=m4a]/bestaudio[acodec=aac]/bestaudio/best',
         'quiet': True,
         'no_warnings': True,
         'extract_flat': False,
-        'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
     }
     
     try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(
-                f"https://www.youtube.com/watch?v={video_id}", 
-                download=False
+        info = safe_extract(f"https://www.youtube.com/watch?v={video_id}", opts)
+        url = info.get('url', '')
+        if not url:
+            return "No URL found", 404
+            
+        def generate():
+            process = subprocess.Popen(
+                ['ffmpeg', '-i', url, '-vn', '-acodec', 'aac', '-b:a', '128k', '-f', 'adts', '-'],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL
             )
-            url = info.get('url', '')
-            if not url:
-                return "No URL found", 404
-                
-            def generate():
-                # Re-encode at 128kbps AAC for smaller file size (~40% less than copy)
-                # -acodec aac -b:a 128k ensures consistent ADTS output regardless of source
-                process = subprocess.Popen(
-                    ['ffmpeg', '-i', url, '-vn', '-acodec', 'aac', '-b:a', '128k', '-f', 'adts', '-'],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.DEVNULL
-                )
-                try:
-                    while True:
-                        data = process.stdout.read(8192)
-                        if not data:
-                            break
-                        yield data
-                finally:
-                    process.kill()
+            try:
+                while True:
+                    data = process.stdout.read(8192)
+                    if not data:
+                        break
+                    yield data
+            finally:
+                process.kill()
 
-            return Response(generate(), mimetype='audio/aac', headers={
-                'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
-                'Pragma': 'no-cache'
-            })
+        return Response(generate(), mimetype='audio/aac', headers={
+            'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+            'Pragma': 'no-cache'
+        })
     except Exception as e:
         logger.error(f"Proxy error: {str(e)}")
         return str(e), 500
 
 @app.route('/download')
 def download():
-    """Descarga el audio completo a un fichero temporal y lo sirve como binario.
-    Esto permite que CapacitorHttp lo descargue de un solo golpe sin problemas de streaming chunked."""
     video_id = request.args.get('id', '')
     if not video_id:
         return "No ID provided", 400
@@ -151,17 +174,13 @@ def download():
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'aac',
         }],
-        'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
     }
 
     try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
+        safe_extract(f"https://www.youtube.com/watch?v={video_id}", opts, action="download")
 
-        # yt-dlp puede renombrar el archivo si hace conversión
         actual_file = tmp_file if os.path.exists(tmp_file) else tmp_file.replace('.m4a', '.aac')
         if not os.path.exists(actual_file):
-            # fallback: buscar el primero que tengamos en tmp_dir
             candidates = [os.path.join(tmp_dir, f) for f in os.listdir(tmp_dir)]
             actual_file = candidates[0] if candidates else None
 
@@ -170,7 +189,7 @@ def download():
 
         logger.info(f"Sirviendo {actual_file} ({os.path.getsize(actual_file)} bytes)")
         response = send_file(actual_file, mimetype='audio/aac', as_attachment=False)
-        # Cleanup temp file after sending
+        
         @response.call_on_close
         def cleanup():
             try:
@@ -195,38 +214,30 @@ def formats():
         'quiet': True,
         'extract_flat': False,
         'no_warnings': True,
-        'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
     }
     
     try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(
-                f"https://www.youtube.com/watch?v={video_id}", 
-                download=False
-            )
+        info = safe_extract(f"https://www.youtube.com/watch?v={video_id}", opts)
             
-            formats_list = []
-            for f in info.get('formats', []):
-                formats_list.append({
-                    'format_id': f.get('format_id', ''),
-                    'ext': f.get('ext', ''),
-                    'vcodec': f.get('vcodec', 'none'),
-                    'acodec': f.get('acodec', 'none'),
-                    'filesize': f.get('filesize', 0),
-                    'tbr': f.get('tbr', 0),
-                    'format_note': f.get('format_note', ''),
-                    'url': f.get('url', '')
-                })
-                
+        formats_list = []
+        for f in info.get('formats', []):
+            formats_list.append({
+                'format_id': f.get('format_id', ''),
+                'ext': f.get('ext', ''),
+                'vcodec': f.get('vcodec', 'none'),
+                'acodec': f.get('acodec', 'none'),
+                'filesize': f.get('filesize', 0),
+                'tbr': f.get('tbr', 0),
+                'format_note': f.get('format_note', ''),
+                'url': f.get('url', '')
+            })
+            
         return jsonify({'formats': formats_list})
     except Exception as e:
         logger.error(f"Formats error: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-
 if __name__ == '__main__':
-    # Usa el puerto que da Railway o 5000 por defecto
     port = int(os.environ.get('PORT', 5000))
-    # debug=False en produccion (Railway). Solo activar localmente.
     debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
     app.run(host='0.0.0.0', port=port, debug=debug)
