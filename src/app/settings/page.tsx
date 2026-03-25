@@ -13,6 +13,9 @@ import { useTheme } from 'next-themes';
 import { toast } from 'sonner';
 import { InstallButton } from '@/components/InstallButton';
 import { db } from '@/core/db/db';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 
 export default function SettingsPage() {
   const { 
@@ -28,17 +31,46 @@ export default function SettingsPage() {
 
   const handleExport = async () => {
     try {
-      const data = await LibraryService.exportData();
-      const blob = new Blob([data], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `chrismusic-backup-${new Date().toISOString().split('T')[0]}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      toast.success('Copia de seguridad descargada');
+      const blob = await LibraryService.exportData();
+      const fileName = `chrismusic-backup-${new Date().toISOString().split('T')[0]}.zip`;
+
+      if (Capacitor.isNativePlatform()) {
+        const reader = new FileReader();
+        reader.readAsDataURL(blob);
+        reader.onloadend = async () => {
+          const base64data = reader.result as string;
+          const base64 = base64data.split(',')[1];
+          
+          try {
+            const { uri } = await Filesystem.writeFile({
+              path: fileName,
+              data: base64,
+              directory: Directory.Cache
+            });
+
+            await Share.share({
+              title: 'Copia de Seguridad ChrisMusic',
+              text: 'Tu biblioteca de música de ChrisMusic.',
+              url: uri,
+              dialogTitle: '¿Dónde quieres guardar tu copia?'
+            });
+            toast.success('Backup preparado para compartir');
+          } catch (fileErr) {
+            console.error(fileErr);
+            toast.error('Error al preparar el archivo en móvil');
+          }
+        };
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast.success('Copia de seguridad descargada (formato ZIP)');
+      }
     } catch (err) {
       console.error(err);
       toast.error('Error al exportar datos');
@@ -52,16 +84,16 @@ export default function SettingsPage() {
     const reader = new FileReader();
     reader.onload = async (event) => {
       try {
-        const json = event.target?.result as string;
-        await LibraryService.importData(json);
+        const arrayBuffer = event.target?.result as ArrayBuffer;
+        await LibraryService.importData(arrayBuffer);
         toast.success('Datos importados correctamente. Reinicia la app para ver los cambios.');
         setTimeout(() => window.location.reload(), 2000);
       } catch (err) {
         console.error(err);
-        toast.error('Error al importar el archivo. Formato no válido.');
+        toast.error('Error al importar el archivo. Formato ZIP no válido o corrupto.');
       }
     };
-    reader.readAsText(file);
+    reader.readAsArrayBuffer(file);
   };
 
   const handleClearHistory = async () => {
@@ -222,7 +254,7 @@ export default function SettingsPage() {
                 </div>
                 <div>
                   <p className="font-black text-lg text-black/80 dark:text-white/90 tracking-tight">Exportar Todo</p>
-                  <p className="text-sm font-bold text-black/30 dark:text-white/40 mt-0.5 uppercase tracking-widest text-[10px]">Copia JSON</p>
+                  <p className="text-sm font-bold text-black/30 dark:text-white/40 mt-0.5 uppercase tracking-widest text-[10px]">Copia comprimida (ZIP)</p>
                 </div>
               </div>
               <div className="w-10 h-10 rounded-full bg-black/5 dark:bg-white/5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
@@ -240,7 +272,7 @@ export default function SettingsPage() {
                   <p className="text-sm font-bold text-black/30 dark:text-white/40 mt-0.5 uppercase tracking-widest text-[10px]">Restaurar datos</p>
                 </div>
               </div>
-              <input type="file" accept=".json" className="hidden" onChange={handleImport} />
+              <input type="file" accept=".zip" className="hidden" onChange={handleImport} />
             </label>
 
             <button

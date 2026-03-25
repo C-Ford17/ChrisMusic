@@ -37,6 +37,15 @@ class AudioEngine {
       this.htmlPlayer.addEventListener('loadedmetadata', () => {
         if (this.onStateChange) this.onStateChange(1);
       });
+      this.htmlPlayer.addEventListener('waiting', () => {
+        if (this.onStateChange) this.onStateChange(3); // State 3 = Buffering
+      });
+      this.htmlPlayer.addEventListener('playing', () => {
+        if (this.onStateChange) this.onStateChange(1); // State 1 = Playing
+      });
+      this.htmlPlayer.addEventListener('canplay', () => {
+        if (this.onStateChange) this.onStateChange(1); // State 1 = Playing
+      });
       this.htmlPlayer.addEventListener('timeupdate', () => {
         if (this.onStateChange) this.onStateChange(this.getPlayerState());
       });

@@ -32,7 +32,7 @@ export default function SearchPage() {
   const [selectedSong, setSelectedSong] = useState<Song | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const { playSong, addToQueue, toggleDownload, downloadingSongs } = usePlayerStore();
+  const { playSong, addToQueue, toggleDownload, downloadingSongs, currentSong, isBuffering } = usePlayerStore();
 
   const searchHistory = useLiveQuery(
     () => db.searchHistory.orderBy('timestamp').reverse().limit(10).toArray(),
@@ -200,9 +200,21 @@ export default function SearchPage() {
                       <Image src={song.thumbnailUrl} alt={song.title} fill sizes="(max-width: 768px) 100vw, 300px" className="object-cover group-hover:scale-110 transition-transform duration-700" />
                       <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                         <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-black shadow-xl scale-90 group-hover:scale-100 transition-transform">
-                          <Music size={24} fill="currentColor" />
+                          {(currentSong?.id === song.id && isBuffering) ? (
+                            <Loader2 size={24} className="animate-spin" />
+                          ) : (
+                            <Music size={24} fill="currentColor" />
+                          )}
                         </div>
                       </div>
+                      {/* Always show loader if it's the current charging song, even if not hovering */}
+                      {currentSong?.id === song.id && isBuffering && (
+                         <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                            <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-black shadow-xl">
+                               <Loader2 size={24} className="animate-spin" />
+                            </div>
+                         </div>
+                      )}
                     </div>
                     <div className="flex-1 min-w-0 px-1">
                       <h3 className="text-black dark:text-white font-black line-clamp-2 group-hover:text-[#7C3AED] transition-colors tracking-tight text-lg leading-tight min-h-[3rem] overflow-hidden">{song.title}</h3>

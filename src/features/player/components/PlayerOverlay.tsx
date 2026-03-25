@@ -34,6 +34,7 @@ export function PlayerOverlay() {
     isShuffle, repeatMode, toggleShuffle, toggleRepeatMode,
     showLyrics, setShowLyrics,
     toggleDownload, downloadingSongs,
+    isBuffering,
     syncState
   } = usePlayerStore();
 
@@ -66,7 +67,6 @@ export function PlayerOverlay() {
   const isDownloading = currentSong ? downloadingSongs.has(currentSong.id) : false;
 
   const [isPlaylistModalOpen, setIsPlaylistModalOpen] = useState(false);
-  const [isBuffering, setIsBuffering] = useState(false);
   const [swipeDeltaX, setSwipeDeltaX] = useState(0);
   const touchStartX = React.useRef<number | null>(null);
   const SWIPE_THRESHOLD = 60;
@@ -93,29 +93,6 @@ export function PlayerOverlay() {
     setSwipeDeltaX(0);
   };
 
-  // Show spinner immediately when song changes, clear when audio actually plays.
-  // IMPORTANT: skip if not playing — avoids infinite spinner on app restore.
-  useEffect(() => {
-    if (!currentSong || !isPlaying) { setIsBuffering(false); return; }
-    setIsBuffering(true);
-
-    const el = (audioEngine as unknown as { htmlPlayer?: HTMLAudioElement }).htmlPlayer;
-    if (!el) return;
-    const onPlaying = () => setIsBuffering(false);
-    const onCanPlayThrough = () => setIsBuffering(false);
-    const onWaiting = () => setIsBuffering(true);
-    const onError = () => setIsBuffering(false);
-    el.addEventListener('playing', onPlaying);
-    el.addEventListener('canplaythrough', onCanPlayThrough);
-    el.addEventListener('waiting', onWaiting);
-    el.addEventListener('error', onError);
-    return () => {
-      el.removeEventListener('playing', onPlaying);
-      el.removeEventListener('canplaythrough', onCanPlayThrough);
-      el.removeEventListener('waiting', onWaiting);
-      el.removeEventListener('error', onError);
-    };
-  }, [currentSong, isPlaying]);
 
 
   const [formats, setFormats] = useState<any[]>([]);
@@ -387,7 +364,10 @@ export function PlayerOverlay() {
                         <button onClick={toggleShuffle} className={`transition-all hover:scale-110 ${isShuffle ? 'text-[#7C3AED]' : 'text-black/20 dark:text-white/40 hover:text-black dark:hover:text-white'}`}><Shuffle size={24} /></button>
                         <button onClick={playPrevious} className="text-black dark:text-white hover:text-[#7C3AED] transition-all"><SkipBack size={36} fill="currentColor" /></button>
                         <button onClick={togglePlayPause} className="w-20 h-20 bg-black dark:bg-white text-white dark:text-black rounded-full flex items-center justify-center shadow-2xl hover:scale-110 active:scale-90 transition-all">
-                          {isPlaying ? <Pause size={32} fill="currentColor" /> : <Play size={32} fill="currentColor" className="ml-1" />}
+                          {isBuffering 
+                            ? <Loader2 size={32} className="animate-spin" />
+                            : isPlaying ? <Pause size={32} fill="currentColor" /> : <Play size={32} fill="currentColor" className="ml-1" />
+                          }
                         </button>
                         <button onClick={() => playNext()} className="text-black dark:text-white hover:text-[#7C3AED] transition-all"><SkipForward size={36} fill="currentColor" /></button>
                         <button onClick={toggleRepeatMode} className={`transition-all hover:scale-110 ${repeatMode !== 'off' ? 'text-[#7C3AED]' : 'text-black/20 dark:text-white/40 hover:text-black dark:hover:text-white'}`}>

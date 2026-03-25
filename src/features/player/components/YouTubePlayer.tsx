@@ -9,7 +9,9 @@ export function YouTubePlayer() {
     isPlaying, 
     play, pause, playNext, playPrevious,
     setProgress, setDuration,
-    volume
+    setIsBuffering,
+    volume,
+    currentSong
   } = usePlayerStore();
   
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -30,13 +32,28 @@ export function YouTubePlayer() {
     // Bridge AudioEngine events to Store
     const handleStateChange = (state: number) => {
       if (state === 1) { // Playing
+        setIsBuffering(false);
+        const actualDuration = Math.floor(audioEngine.getDuration());
+        if (actualDuration > 0) {
+          setDuration(actualDuration);
+          
+          // Sync currentSong duration if mismatch > 2 seconds
+          if (currentSong && Math.abs((currentSong.duration || 0) - actualDuration) > 2) {
+            console.log(`[YouTubePlayer] Syncing duration: ${currentSong.duration} -> ${actualDuration}`);
+            usePlayerStore.setState(state => ({
+              currentSong: state.currentSong ? { ...state.currentSong, duration: actualDuration } : null
+            }));
+          }
+        }
         play();
-        setDuration(Math.floor(audioEngine.getDuration()));
         startIndexing();
+      } else if (state === 3) { // Buffering
+        setIsBuffering(true);
       } else if (state === 2 || state === 0) { // Paused or Ended
+        setIsBuffering(false);
         pause();
         stopIndexing();
-        if (state === 0) playNext();
+        if (state === 0) playNext(true);
       }
     };
 
@@ -46,7 +63,7 @@ export function YouTubePlayer() {
       stopIndexing();
       // We don't destroy here because it might be a component re-mount
     };
-  }, [play, pause, setDuration, playNext, startIndexing, stopIndexing]);
+  }, [play, pause, setDuration, playNext, startIndexing, stopIndexing, currentSong, setIsBuffering]);
 
   // Handle Play/Pause synchronization
   useEffect(() => {

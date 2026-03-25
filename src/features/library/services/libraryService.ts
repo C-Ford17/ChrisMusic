@@ -1,5 +1,7 @@
+import JSZip from 'jszip';
 import { db, type LocalSong } from '@/core/db/db';
 import { Song } from '@/core/types/music';
+import { type LyricsData } from '@/features/lyrics/services/lrclibService';
 
 // Converts our global Song type nicely to LocalSong for Dexie
 function mapToLocalSong(song: Song): LocalSong {
@@ -97,7 +99,7 @@ export const LibraryService = {
   },
 
   // Export / Import
-  async exportData(): Promise<string> {
+  async exportData(): Promise<Blob> {
     const playlists = await db.playlists.toArray();
     const favorites = await db.favorites.toArray();
     const history = await db.history.toArray();
@@ -106,7 +108,7 @@ export const LibraryService = {
     const searchHistory = await db.searchHistory.toArray();
 
     const data = {
-      version: 1,
+      version: 2, // Upgraded version for ZIP format
       timestamp: Date.now(),
       playlists,
       favorites,
@@ -116,21 +118,32 @@ export const LibraryService = {
       searchHistory
     };
 
-    return JSON.stringify(data);
+    const zip = new JSZip();
+    zip.file("db.json", JSON.stringify(data));
+    
+    return await zip.generateAsync({ type: "blob" });
   },
 
-  async importData(json: string): Promise<void> {
+  async importData(fileData: Blob | ArrayBuffer): Promise<void> {
+    const zip = new JSZip();
+    const contents = await zip.loadAsync(fileData);
+    const dbFile = contents.file("db.json");
+    
+    if (!dbFile) {
+      throw new Error("Archivo de base de datos no encontrado en el ZIP");
+    }
+
+    const json = await dbFile.async("string");
     const data = JSON.parse(json);
     
     // Simple validation
     if (!data.playlists || !data.favorites) {
-      throw new Error("Invalid format");
+      throw new Error("Formato de datos no válido");
     }
 
     // Use a transaction for safety
-    await db.transaction('rw', [db.playlists, db.favorites, db.history, db.playlistEntries, db.lyrics], async () => {
-      // We merge or replace? Let's replace for simplicity in this sprint 
-      // or append? Let's append if ID doesn't exist.
+    await db.transaction('rw', [db.playlists, db.favorites, db.history, db.playlistEntries, db.lyrics, db.searchHistory], async () => {
+      // Merge strategy: Put for uniquely identified items, Add for others
       for (const p of data.playlists) {
          await db.playlists.put(p);
       }
@@ -138,8 +151,7 @@ export const LibraryService = {
          await db.favorites.put(f);
       }
       for (const h of data.history) {
-         // History might not have unique IDs if they were auto-generated but let's try
-         if (h.id) delete h.id; // Let Dexie generate new IDs for history to avoid conflict
+         if (h.id) delete h.id; 
          await db.history.add(h);
       }
       for (const e of data.playlistEntries) {
@@ -164,7 +176,7 @@ export const LibraryService = {
   },
 
   // Lyrics Management
-  async saveLyrics(songId: string, data: any): Promise<void> {
+  async saveLyrics(songId: string, data: LyricsData): Promise<void> {
     await db.lyrics.put({
       id: songId,
       data,
@@ -172,8 +184,8 @@ export const LibraryService = {
     });
   },
 
-  async getLyrics(songId: string): Promise<any | null> {
-    const record = await db.lyrics.get(songId);
+  async getLyrics(songId: string): Promise<LyricsData | null> {
+    const record = await db.lyrics.get(songId) as { data: LyricsData } | undefined;
     return record ? record.data : null;
   },
 

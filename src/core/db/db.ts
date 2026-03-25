@@ -83,28 +83,16 @@ export class ChrisMusicDB extends Dexie {
       playlistEntries: '++id, playlistId, addedAt'
     });
 
-    // Version 2: Added lyrics storage
-    this.version(2).stores({
-      lyrics: 'id, updatedAt'
-    });
-
-    // Version 3: Added search history
-    this.version(3).stores({
-      searchHistory: 'query, timestamp'
-    });
-
-    // Version 4: Offline songs
-    this.version(4).stores({
-      offlineSongs: 'id, downloadedAt'
-    });
-
-    // Version 5: Added filePath for native storage
-    this.version(5).stores({
-      offlineSongs: 'id, downloadedAt'
-    });
-
-    // Version 6: Cached songs
-    this.version(6).stores({
+    // Version 2-6 were incremental but incomplete (Dexie requires full schema in each version)
+    // Consolidating everything in Version 7
+    this.version(7).stores({
+      favorites: 'id, addedAt',
+      history: '++id, playedAt',
+      playlists: 'id, createdAt',
+      playlistEntries: '++id, playlistId, addedAt',
+      lyrics: 'id, updatedAt',
+      searchHistory: 'query, timestamp',
+      offlineSongs: 'id, downloadedAt',
       cachedSongs: 'id, cachedAt'
     });
   }

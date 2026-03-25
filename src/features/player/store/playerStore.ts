@@ -24,6 +24,7 @@ interface PlayerState {
   isLyricsLoading: boolean;
   showLyrics: boolean;
   isCaching: string | null; // ID of the song being cached
+  isBuffering: boolean;
 
   // Offline State
   downloadingSongs: Set<string>;
@@ -53,6 +54,7 @@ interface PlayerState {
   fetchLyrics: (song: Song) => Promise<void>;
   updateLyrics: (data: LyricsData) => Promise<void>;
   setShowLyrics: (show: boolean) => void;
+  setIsBuffering: (isBuffering: boolean) => void;
 }
 
 export const usePlayerStore = create<PlayerState>()(
@@ -72,6 +74,7 @@ export const usePlayerStore = create<PlayerState>()(
       isLyricsLoading: false,
       showLyrics: false,
       isCaching: null,
+      isBuffering: false,
       downloadingSongs: new Set(),
 
       toggleDownload: async (song: Song) => {
@@ -113,8 +116,15 @@ export const usePlayerStore = create<PlayerState>()(
       }),
 
       playSong: async (song: Song, startSeconds: number = 0) => {
+        set({ 
+          currentSong: song, 
+          isPlaying: true, 
+          isBuffering: true, 
+          queue: [song], 
+          lyrics: null, 
+          progress: startSeconds 
+        });
         LibraryService.recordPlay(song);
-        set({ currentSong: song, isPlaying: true, queue: [song], lyrics: null, progress: startSeconds });
         get().fetchLyrics(song);
         const finalUrl = await OfflineService.getOfflineUrl(song.id);
         if (finalUrl) {
@@ -174,8 +184,15 @@ export const usePlayerStore = create<PlayerState>()(
       },
 
       playSongInQueue: async (song: Song, queue: Song[], startSeconds: number = 0) => {
+        set({ 
+          currentSong: song, 
+          isPlaying: true, 
+          isBuffering: true, 
+          queue, 
+          lyrics: null, 
+          progress: startSeconds 
+        });
         LibraryService.recordPlay(song);
-        set({ currentSong: song, isPlaying: true, queue, lyrics: null, progress: startSeconds });
         get().fetchLyrics(song);
         const offlineUrl = await OfflineService.getOfflineUrl(song.id);
         if (offlineUrl) {
@@ -412,6 +429,7 @@ export const usePlayerStore = create<PlayerState>()(
       },
 
       setShowLyrics: (show: boolean) => set({ showLyrics: show }),
+      setIsBuffering: (isBuffering: boolean) => set({ isBuffering }),
     }),
     {
       name: 'chrismusic-player-storage',
@@ -427,7 +445,10 @@ export const usePlayerStore = create<PlayerState>()(
         showLyrics: state.showLyrics,
       }),
       onRehydrateStorage: () => (state) => {
-        if (state) state.isPlaying = false;
+        if (state) {
+          state.isPlaying = false;
+          state.isBuffering = false;
+        }
       },
     }
   )

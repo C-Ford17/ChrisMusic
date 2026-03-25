@@ -10,7 +10,7 @@ description = "Allow searching YouTube via Rust"
 commands.allow = ["search_youtube_native_cmd"]
 
 [[permission]]
-identifier = "allow-get-streaming-url"a
+identifier = "allow-get-streaming-url"
 description = "Allow getting YouTube streaming URLs"
 commands.allow = ["get_streaming_url"]
 
