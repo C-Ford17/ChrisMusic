@@ -55,6 +55,7 @@ interface PlayerState {
   updateLyrics: (data: LyricsData) => Promise<void>;
   setShowLyrics: (show: boolean) => void;
   setIsBuffering: (isBuffering: boolean) => void;
+  clearPlayerState: () => void;
 }
 
 export const usePlayerStore = create<PlayerState>()(
@@ -430,6 +431,18 @@ export const usePlayerStore = create<PlayerState>()(
 
       setShowLyrics: (show: boolean) => set({ showLyrics: show }),
       setIsBuffering: (isBuffering: boolean) => set({ isBuffering }),
+      clearPlayerState: () => {
+        audioEngine.pause();
+        set({
+          currentSong: null,
+          queue: [],
+          isPlaying: false,
+          progress: 0,
+          duration: 0,
+          lyrics: null,
+          isNowPlayingOpen: false
+        });
+      },
     }),
     {
       name: 'chrismusic-player-storage',

@@ -16,6 +16,7 @@ import { db } from '@/core/db/db';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
+import { usePlayerStore } from '@/features/player/store/playerStore';
 
 export default function SettingsPage() {
   const { 
@@ -96,10 +97,15 @@ export default function SettingsPage() {
     reader.readAsArrayBuffer(file);
   };
 
-  const handleClearHistory = async () => {
-    if (confirm('¿Estás seguro de que quieres borrar todo el historial?')) {
-      await LibraryService.clearHistory();
-      toast.success('Historial borrado');
+  const { 
+    clearPlayerState 
+  } = usePlayerStore();
+
+  const handleClearAll = async () => {
+    if (confirm('¿Estás seguro de que quieres borrar TODOS tus datos (favoritos, playlists, historial)?')) {
+      await LibraryService.clearAllData();
+      clearPlayerState();
+      toast.success('Todos los datos han sido borrados');
     }
   };
 
@@ -291,7 +297,7 @@ export default function SettingsPage() {
             </button>
 
             <button
-              onClick={handleClearHistory}
+              onClick={handleClearAll}
               className="w-full flex items-center justify-between p-8 hover:bg-red-500/10 transition-all text-left border-t border-black/5 dark:border-white/5 group"
             >
               <div className="flex items-center gap-5 text-red-500">

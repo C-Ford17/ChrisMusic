@@ -171,8 +171,28 @@ export const LibraryService = {
     });
   },
 
-  async clearHistory(): Promise<void> {
-    await db.history.clear();
+  async clearAllData(): Promise<void> {
+    await db.transaction('rw', [
+      db.favorites, 
+      db.history, 
+      db.playlists, 
+      db.playlistEntries, 
+      db.lyrics, 
+      db.searchHistory,
+      db.offlineSongs,
+      db.cachedSongs
+    ], async () => {
+      await Promise.all([
+        db.favorites.clear(),
+        db.history.clear(),
+        db.playlists.clear(),
+        db.playlistEntries.clear(),
+        db.lyrics.clear(),
+        db.searchHistory.clear(),
+        db.offlineSongs.clear(),
+        db.cachedSongs.clear()
+      ]);
+    });
   },
 
   // Lyrics Management
