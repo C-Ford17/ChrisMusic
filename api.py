@@ -20,8 +20,11 @@ def safe_extract(url, base_opts, action="extract"):
     Intenta extraer o descargar usando diferentes clientes de YouTube en cascada.
     Si YouTube bloquea uno asumiendo que es un bot, intenta con el siguiente.
     """
+    COOKIES_FILE = 'cookies.txt'
+    
     clients = [
         ['ios', 'android'], 
+        ['android_music', 'android'], # Cliente especializado en música
         ['tv_embedded', 'web_creator'], 
         ['mweb'],
         ['web']
@@ -30,6 +33,12 @@ def safe_extract(url, base_opts, action="extract"):
     for client_list in clients:
         opts = base_opts.copy()
         opts['extractor_args'] = {'youtube': {'player_client': client_list}}
+        
+        # Si existe el archivo de cookies, lo usamos obligatoriamente
+        if os.path.exists(COOKIES_FILE):
+            opts['cookiefile'] = COOKIES_FILE
+            if client_list == clients[0]: # Solo loguear una vez
+                logger.info(f"Usando cookies detectadas en {COOKIES_FILE}")
         
         try:
             logger.info(f"Intentando con cliente(s): {client_list}")
@@ -47,12 +56,11 @@ def safe_extract(url, base_opts, action="extract"):
             logger.warning(f"Fallo con {client_list}: {error_msg}")
             
             # Si el error NO es sobre el bot/sign in, detenemos el intento
-            # (Ejemplo: si el video es privado o fue borrado)
             if "Sign in" not in error_msg and "bot" not in error_msg.lower():
                 raise e
                 
     # Si termina el ciclo y todos fallaron:
-    raise Exception("Todos los clientes fueron bloqueados por YouTube (Bot Error).")
+    raise Exception("Todos los clientes fueron bloqueados por YouTube (Bot Error). Por favor, sube un archivo cookies.txt actualizado.")
 
 @app.route('/search')
 def search():
