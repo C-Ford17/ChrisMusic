@@ -40,6 +40,9 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": [
+      "../cookies.txt"
+    ],
     "externalBin": [
       "binaries/yt-dlp"
     ]

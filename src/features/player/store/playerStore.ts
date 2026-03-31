@@ -132,7 +132,8 @@ export const usePlayerStore = create<PlayerState>()(
           audioEngine.loadSong(song, startSeconds, true, finalUrl);
           return;
         }
-        audioEngine.loadSong(song, startSeconds, true);
+
+        // --- CORRECCIÓN: No cargar todavía, esperar a la extracción ---
         const isTauri = typeof window !== 'undefined' && (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
         if (isTauri) {
           try {

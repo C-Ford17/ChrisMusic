@@ -16,6 +16,7 @@ pub fn run() {
       commands::download_to_disk,
       commands::search_youtube_native_cmd,
       commands::get_streaming_url,
+      commands::save_cookies_cmd,
       commands::test_ytdlp
     ])
     .run(tauri::generate_context!())

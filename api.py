@@ -245,6 +245,23 @@ def formats():
         logger.error(f"Formats error: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+@app.route('/update-cookies', methods=['POST'])
+def update_cookies():
+    try:
+        data = request.get_json()
+        contents = data.get('contents', '')
+        if not contents:
+            return jsonify({"error": "No contents provided"}), 400
+        
+        with open('cookies.txt', 'w', encoding='utf-8') as f:
+            f.write(contents)
+        
+        logger.info("Cookies updated from remote request")
+        return jsonify({"message": "Cookies updated successfully"})
+    except Exception as e:
+        logger.error(f"Update cookies error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'

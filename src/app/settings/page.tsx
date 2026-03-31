@@ -17,6 +17,8 @@ import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { usePlayerStore } from '@/features/player/store/playerStore';
+import { MaintenanceService } from '@/features/library/services/maintenanceService';
+import { useState, useEffect } from 'react';
 
 export default function SettingsPage() {
   const { 
@@ -26,6 +28,49 @@ export default function SettingsPage() {
     isDebugMode, setDebugMode
   } = useSettingsStore();
   const { theme, setTheme } = useTheme();
+
+  const [cookieText, setCookieText] = useState('');
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isSavingLocal, setIsSavingLocal] = useState(false);
+  const [isTauri, setIsTauri] = useState(false);
+
+  useEffect(() => {
+    setIsTauri(typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__);
+  }, []);
+
+  const handleSaveCookiesLocal = async () => {
+    if (!cookieText.trim()) {
+      toast.error('Por favor, pega el contenido del archivo cookies.txt');
+      return;
+    }
+
+    setIsSavingLocal(true);
+    try {
+      await MaintenanceService.saveCookiesLocally(cookieText);
+      toast.success('Cookies guardadas localmente en la PC');
+    } catch (err) {
+      toast.error('Error al guardar cookies en PC');
+    } finally {
+      setIsSavingLocal(false);
+    }
+  };
+
+  const handleSyncCookiesApi = async () => {
+    if (!cookieText.trim()) {
+      toast.error('Por favor, pega el contenido del archivo cookies.txt');
+      return;
+    }
+
+    setIsSyncing(true);
+    try {
+      await MaintenanceService.syncCookiesWithApi(cookieText);
+      toast.success('Cookies sincronizadas con la API correctamente');
+    } catch (err) {
+      toast.error('Error al sincronizar con la API');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   // Sync store with next-themes if they differ
   const currentTheme = theme || storeTheme;
@@ -310,6 +355,51 @@ export default function SettingsPage() {
                 </div>
               </div>
             </button>
+          </div>
+        </section>
+
+        {/* Mantenimiento YouTube */}
+        <section className="animate-in fade-in slide-in-from-bottom-10 duration-1000">
+          <h2 className="text-xs font-black text-red-500 uppercase tracking-[0.2em] mb-5 px-3 flex items-center gap-3">
+            <DatabaseZap size={16} /> Mantenimiento YouTube
+          </h2>
+          <div className="bg-black/5 dark:bg-white/5 rounded-[32px] overflow-hidden border border-black/10 dark:border-white/10 shadow-sm p-8 space-y-6">
+            <div>
+              <p className="font-black text-lg text-black/80 dark:text-white/90 tracking-tight">Actualizar Cookies</p>
+              <p className="text-sm font-bold text-black/30 dark:text-white/40 mt-1">
+                Pega aquí el contenido de tu <code className="bg-black/10 dark:bg-white/10 px-2 py-0.5 rounded text-[#7C3AED]">cookies.txt</code> para evitar bloqueos de YouTube.
+              </p>
+            </div>
+            
+            <textarea
+              className="w-full h-32 bg-black/5 dark:bg-black/40 border border-black/10 dark:border-white/10 rounded-2xl p-4 text-[10px] font-mono text-black/60 dark:text-white/60 focus:ring-2 focus:ring-[#7C3AED] outline-none transition-all resize-none"
+              placeholder="# Netscape HTTP Cookie File..."
+              value={cookieText}
+              onChange={(e) => setCookieText(e.target.value)}
+            />
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              {isTauri && (
+                <button
+                  onClick={handleSaveCookiesLocal}
+                  disabled={isSavingLocal}
+                  className="flex-1 py-4 bg-white dark:bg-white text-black rounded-2xl text-[10px] font-black uppercase tracking-widest hover:scale-[1.02] active:scale-95 transition-all shadow-lg disabled:opacity-50"
+                >
+                  {isSavingLocal ? 'Guardando...' : 'Guardar en esta PC'}
+                </button>
+              )}
+              <button
+                onClick={handleSyncCookiesApi}
+                disabled={isSyncing}
+                className="flex-1 py-4 bg-[#7C3AED] text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:scale-[1.02] active:scale-95 transition-all shadow-lg shadow-[#7C3AED]/20 disabled:opacity-50"
+              >
+                {isSyncing ? 'Sincronizando...' : 'Sincronizar con API'}
+              </button>
+            </div>
+            
+            <p className="text-[9px] font-bold text-black/20 dark:text-white/20 uppercase tracking-widest text-center">
+              Recomendado si recibes errores de &quot;Sign in to confirm you are not a bot&quot;
+            </p>
           </div>
         </section>
 

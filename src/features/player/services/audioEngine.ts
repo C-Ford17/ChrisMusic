@@ -87,7 +87,11 @@ class AudioEngine {
         await this.updateMediaSessionState('playing');
         this.updateMediaSessionPosition();
       }
-    } catch (error) {
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        console.warn('AudioEngine playback interrupted (AbortError). This is normal when switching tracks rapidly.');
+        return;
+      }
       console.error('AudioEngine playback error:', error);
     }
   }
