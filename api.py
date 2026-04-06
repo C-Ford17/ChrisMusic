@@ -8,6 +8,7 @@ import tempfile
 
 
 app = Flask(__name__)
+app.url_map.strict_slashes = False # Allow /route and /route/ to match the same
 CORS(app) # Allow CORS for local development
 
 # Configure logging
@@ -211,6 +212,10 @@ def download():
         logger.error(f"Download error: {str(e)}")
         return str(e), 500
 
+@app.route('/health')
+def health():
+    return jsonify({"status": "ok", "message": "API is running"}), 200
+
 @app.route('/formats')
 def formats():
     video_id = request.args.get('id', '')
@@ -245,7 +250,7 @@ def formats():
         logger.error(f"Formats error: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/update-cookies', methods=['POST'])
+@app.route('/update-cookies', methods=['POST', 'OPTIONS'])
 def update_cookies():
     try:
         data = request.get_json()
