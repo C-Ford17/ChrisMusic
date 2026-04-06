@@ -19,49 +19,65 @@ logger = logging.getLogger(__name__)
 def safe_extract(url, base_opts, action="extract"):
     """
     Intenta extraer o descargar usando diferentes clientes de YouTube en cascada.
-    Si YouTube bloquea uno asumiendo que es un bot, intenta con el siguiente.
     """
     COOKIES_FILE = 'cookies.txt'
     
+    # Lista expandida de clientes para mayor resiliencia
     clients = [
         ['ios', 'android'], 
-        ['android_music', 'android'], # Cliente especializado en música
+        ['android_music', 'android'],
         ['tv_embedded', 'web_creator'], 
+        ['android_vr', 'android'],
+        ['web_embedded'],
         ['mweb'],
         ['web']
     ]
     
-    for client_list in clients:
+    last_error = None
+    cookies_available = os.path.exists(COOKIES_FILE)
+
+    # Intento 1: Con Cookies (si existen)
+    if cookies_available:
+        for client_list in clients:
+            opts = base_opts.copy()
+            opts['extractor_args'] = {'youtube': {'player_client': client_list}}
+            opts['cookiefile'] = COOKIES_FILE
+            
+            try:
+                logger.info(f"Probando con cookies + cliente: {client_list}")
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    if action == "download":
+                        ydl.download([url])
+                        return True
+                    else:
+                        return ydl.extract_info(url, download=False)
+            except Exception as e:
+                last_error = str(e)
+                logger.warning(f"Fallo con cookies + {client_list}: {last_error}")
+                # Seguimos intentando con el próximo cliente
+                continue
+
+    # Intento 2: Sin Cookies (como último recurso o si no hay archivo)
+    logger.info("Intentando extracción básica sin cookies como último recurso...")
+    for client_list in [['tv_embedded'], ['web']]:
         opts = base_opts.copy()
         opts['extractor_args'] = {'youtube': {'player_client': client_list}}
-        
-        # Si existe el archivo de cookies, lo usamos obligatoriamente
-        if os.path.exists(COOKIES_FILE):
-            opts['cookiefile'] = COOKIES_FILE
-            if client_list == clients[0]: # Solo loguear una vez
-                logger.info(f"Usando cookies detectadas en {COOKIES_FILE}")
+        if 'cookiefile' in opts: del opts['cookiefile']
         
         try:
-            logger.info(f"Intentando con cliente(s): {client_list}")
+            logger.info(f"Probando SIN cookies + cliente: {client_list}")
             with yt_dlp.YoutubeDL(opts) as ydl:
                 if action == "download":
                     ydl.download([url])
                     return True
                 else:
-                    info = ydl.extract_info(url, download=False)
-                    logger.info(f"¡Éxito con cliente(s): {client_list}!")
-                    return info
-                    
+                    return ydl.extract_info(url, download=False)
         except Exception as e:
-            error_msg = str(e)
-            logger.warning(f"Fallo con {client_list}: {error_msg}")
-            
-            # Si el error NO es sobre el bot/sign in, detenemos el intento
-            if "Sign in" not in error_msg and "bot" not in error_msg.lower():
-                raise e
-                
-    # Si termina el ciclo y todos fallaron:
-    raise Exception("Todos los clientes fueron bloqueados por YouTube (Bot Error). Por favor, sube un archivo cookies.txt actualizado.")
+            last_error = str(e)
+            logger.warning(f"Fallo final sin cookies + {client_list}: {last_error}")
+
+    # Si llegamos aquí, nada funcionó
+    raise Exception(f"YouTube bloqueó todos los intentos (Last Error: {last_error}). Prueba a subir cookies nuevas.")
 
 @app.route('/search')
 def search():
@@ -108,7 +124,7 @@ def stream():
         
     logger.info(f"Getting direct stream for: {video_id}")
     opts = {
-        'format': 'bestaudio[ext=webm]/bestaudio/best',
+        'format': 'bestaudio/best', # More flexible: any best audio
         'quiet': True,
         'no_warnings': True,
         'extract_flat': False,
@@ -129,7 +145,7 @@ def proxy():
         
     logger.info(f"Iniciando FFmpeg Proxy (AAC) para: {video_id}")
     opts = {
-        'format': 'bestaudio[ext=m4a]/bestaudio[acodec=aac]/bestaudio/best',
+        'format': 'bestaudio/best', # Let FFmpeg handle the conversion from any best audio
         'quiet': True,
         'no_warnings': True,
         'extract_flat': False,
@@ -175,7 +191,7 @@ def download():
     tmp_file = os.path.join(tmp_dir, f"{video_id}.m4a")
 
     opts = {
-        'format': 'bestaudio[ext=m4a]/bestaudio/best',
+        'format': 'bestaudio/best',
         'outtmpl': tmp_file,
         'quiet': True,
         'no_warnings': True,
