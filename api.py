@@ -252,6 +252,9 @@ def formats():
 
 @app.route('/update-cookies', methods=['POST', 'OPTIONS'])
 def update_cookies():
+    if request.method == 'OPTIONS':
+        return '', 204
+        
     try:
         # Use force=True to parse JSON even if Content-Type is not application/json
         data = request.get_json(force=True, silent=True)
