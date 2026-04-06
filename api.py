@@ -253,15 +253,29 @@ def formats():
 @app.route('/update-cookies', methods=['POST', 'OPTIONS'])
 def update_cookies():
     try:
-        data = request.get_json()
+        # Use force=True to parse JSON even if Content-Type is not application/json
+        data = request.get_json(force=True, silent=True)
+        
+        if not data:
+            # Fallback for form data or plain text
+            data = request.form.to_dict() if request.form else {}
+        
         contents = data.get('contents', '')
+        
+        # Fallback if the body was just the string contents
+        if not contents and request.data:
+            try:
+                contents = request.data.decode('utf-8')
+            except:
+                pass
+
         if not contents:
-            return jsonify({"error": "No contents provided"}), 400
+            return jsonify({"error": "No contents detected in request body"}), 400
         
         with open('cookies.txt', 'w', encoding='utf-8') as f:
             f.write(contents)
         
-        logger.info("Cookies updated from remote request")
+        logger.info("Cookies updated successfully via remote request")
         return jsonify({"message": "Cookies updated successfully"})
     except Exception as e:
         logger.error(f"Update cookies error: {str(e)}")
