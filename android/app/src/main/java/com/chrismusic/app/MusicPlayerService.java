@@ -1,108 +1,101 @@
 package com.chrismusic.app;
 
+import android.annotation.SuppressLint;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
-import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ServiceInfo;
 import android.os.Build;
-import android.os.IBinder;
 import android.util.Log;
 
+import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
+import androidx.media3.session.MediaSession;
+import androidx.media3.session.MediaSessionService;
 
 /**
- * MusicPlayerService — lightweight ForegroundService for background audio.
+ * MusicPlayerService — Media3 MediaSessionService.
  *
- * Keeps the Media3 ExoPlayer alive when ChrisMusic is minimized.
- * The actual ExoPlayer instance lives in ExoPlayerPlugin; this service
- * only provides the foreground notification required by Android to allow
- * background media playback.
- *
- * In a future iteration this can be promoted to a full Media3
- * MediaSessionService for richer notification controls.
+ * This service allows Android to recognize ChrisMusic as a media player,
+ * providing the system notification controls and lock screen integration.
+ * It retrieves the active MediaSession from ExoPlayerPlugin.
  */
-public class MusicPlayerService extends Service {
+public class MusicPlayerService extends MediaSessionService {
 
     private static final String TAG = "MusicPlayerService";
-    private static final String CHANNEL_ID = "chrismusic_playback";
+    private static final String CHANNEL_ID = "chrismusic_playback_v2";
     private static final int NOTIFICATION_ID = 1001;
 
     @Override
     public void onCreate() {
         super.onCreate();
         createNotificationChannel();
+        Log.d(TAG, "MusicPlayerService created");
     }
-
-    @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
-        String title = "ChrisMusic";
-        String artist = "Reproduciendo en segundo plano";
-
-        if (intent != null) {
-            String t = intent.getStringExtra("title");
-            String a = intent.getStringExtra("artist");
-            if (t != null && !t.isEmpty()) title = t;
-            if (a != null && !a.isEmpty()) artist = a;
-        }
-
-        startForeground(NOTIFICATION_ID, buildNotification(title, artist));
-        Log.d(TAG, "MusicPlayerService started: " + title);
-
-        return START_STICKY;
-    }
-
-    @Override
-    public IBinder onBind(Intent intent) {
-        return null;
-    }
-
-    @Override
-    public void onDestroy() {
-        super.onDestroy();
-        Log.d(TAG, "MusicPlayerService destroyed");
-    }
-
-    // ─── Notification ─────────────────────────────────────────────────────
 
     private void createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel(
                     CHANNEL_ID,
-                    "ChrisMusic Playback",
+                    "Reproductor de ChrisMusic",
                     NotificationManager.IMPORTANCE_LOW
             );
-            channel.setDescription("Controles de reproducción de ChrisMusic");
+            channel.setDescription("Mantiene la app activa en segundo plano");
             channel.setShowBadge(false);
-
             NotificationManager manager = getSystemService(NotificationManager.class);
-            if (manager != null) {
-                manager.createNotificationChannel(channel);
-            }
+            if (manager != null) manager.createNotificationChannel(channel);
         }
     }
 
-    private Notification buildNotification(String title, String artist) {
-        // Tap notification → open app
+    @Nullable
+    @Override
+    public MediaSession onGetSession(MediaSession.ControllerInfo controllerInfo) {
+        // Return the session created by ExoPlayerPlugin
+        MediaSession session = ExoPlayerPlugin.getMediaSession();
+        if (session == null) {
+            Log.w(TAG, "onGetSession: MediaSession is null!");
+        }
+        return session;
+    }
+
+    @SuppressLint("ForegroundServiceType")
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        Log.d(TAG, "MusicPlayerService onStartCommand");
+
+        // Immediately start foreground to satisfy Android 14's strict timer
+        // We use a basic notification until MediaSession takes over
         Intent launchIntent = getPackageManager().getLaunchIntentForPackage(getPackageName());
         PendingIntent contentIntent = PendingIntent.getActivity(
-                this,
-                0,
-                launchIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+                this, 0, launchIntent,
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT
         );
 
-        return new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle(title)
-                .setContentText(artist)
+        Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle("ChrisMusic")
+                .setContentText("Preparando reproducción...")
                 .setSmallIcon(android.R.drawable.ic_media_play)
                 .setContentIntent(contentIntent)
-                .setOngoing(true)
                 .setSilent(true)
+                .setOngoing(true)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
-                .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
-                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .build();
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
+        } else {
+            startForeground(NOTIFICATION_ID, notification);
+        }
+
+        return super.onStartCommand(intent, flags, startId);
+    }
+
+    @Override
+    public void onDestroy() {
+        Log.d(TAG, "MusicPlayerService destroyed");
+        super.onDestroy();
     }
 }

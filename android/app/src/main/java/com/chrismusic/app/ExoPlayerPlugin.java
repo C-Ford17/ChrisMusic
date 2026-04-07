@@ -14,6 +14,7 @@ import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.session.MediaSession;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -45,9 +46,14 @@ public class ExoPlayerPlugin extends Plugin {
     private static final long PROGRESS_INTERVAL_MS = 500;
 
     private ExoPlayer exoPlayer;
+    private static MediaSession mediaSession; // Static so MusicPlayerService can access it
     private final Handler progressHandler = new Handler(Looper.getMainLooper());
     private Runnable progressRunnable;
     private boolean serviceStarted = false;
+
+    public static MediaSession getMediaSession() {
+        return mediaSession;
+    }
 
     // ─── Lifecycle ───────────────────────────────────────────────────────────
 
@@ -82,10 +88,15 @@ public class ExoPlayerPlugin extends Plugin {
                 ensurePlayerCreated();
 
                 // Build MediaItem with metadata for MediaSession / notification
-                MediaMetadata mediaMetadata = new MediaMetadata.Builder()
+                MediaMetadata.Builder metaBuilder = new MediaMetadata.Builder()
                         .setTitle(title)
-                        .setArtist(artist)
-                        .build();
+                        .setArtist(artist);
+                
+                if (artwork != null && !artwork.isEmpty()) {
+                    metaBuilder.setArtworkUri(android.net.Uri.parse(artwork));
+                }
+                
+                MediaMetadata mediaMetadata = metaBuilder.build();
 
                 MediaItem mediaItem = new MediaItem.Builder()
                         .setUri(url)
@@ -197,14 +208,42 @@ public class ExoPlayerPlugin extends Plugin {
     @OptIn(markerClass = UnstableApi.class)
     private void ensurePlayerCreated() {
         if (exoPlayer != null) {
-            exoPlayer.stop();
-            exoPlayer.clearMediaItems();
             return;
         }
 
         Context context = getContext();
 
         exoPlayer = new ExoPlayer.Builder(context).build();
+
+        // Create MediaSession
+        MediaSession.Callback callback = new MediaSession.Callback() {
+            @Override
+            public androidx.media3.session.MediaSession.ConnectionResult onConnect(MediaSession session, MediaSession.ControllerInfo controller) {
+                return new MediaSession.ConnectionResult.AcceptedResultBuilder(session).build();
+            }
+
+            @Override
+            public com.google.common.util.concurrent.ListenableFuture<androidx.media3.session.SessionResult> onCustomCommand(MediaSession session, MediaSession.ControllerInfo controller, androidx.media3.session.SessionCommand customCommand, android.os.Bundle args) {
+                return com.google.common.util.concurrent.Futures.immediateFuture(new androidx.media3.session.SessionResult(androidx.media3.session.SessionResult.RESULT_SUCCESS));
+            }
+        };
+
+        mediaSession = new MediaSession.Builder(context, exoPlayer)
+                .setCallback(new MediaSession.Callback() {
+                    @Override
+                    public int onPlayerCommandRequest(MediaSession session, MediaSession.ControllerInfo controller, int playerCommand) {
+                        if (playerCommand == Player.COMMAND_SEEK_TO_NEXT || playerCommand == Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM) {
+                            notifyListeners("onNativeNext", new JSObject());
+                            return Player.COMMAND_INVALID; // Prevent ExoPlayer from seeking internally
+                        }
+                        if (playerCommand == Player.COMMAND_SEEK_TO_PREVIOUS || playerCommand == Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM) {
+                            notifyListeners("onNativePrevious", new JSObject());
+                            return Player.COMMAND_INVALID; // Prevent ExoPlayer from seeking internally
+                        }
+                        return playerCommand;
+                    }
+                })
+                .build();
 
         exoPlayer.addListener(new Player.Listener() {
             @Override
@@ -312,6 +351,10 @@ public class ExoPlayerPlugin extends Plugin {
     // ─── Cleanup ─────────────────────────────────────────────────────────────
 
     private void releasePlayer() {
+        if (mediaSession != null) {
+            mediaSession.release();
+            mediaSession = null;
+        }
         if (exoPlayer != null) {
             exoPlayer.release();
             exoPlayer = null;

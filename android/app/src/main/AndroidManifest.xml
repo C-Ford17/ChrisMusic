@@ -9,12 +9,16 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
-        <!-- MusicPlayerService: keeps ExoPlayer alive in background -->
+        <!-- MusicPlayerService: keeps ExoPlayer alive in background and provides MediaSession -->
         <service
             android:name=".MusicPlayerService"
             android:foregroundServiceType="mediaPlayback"
-            android:exported="false"
-        />
+            android:exported="false">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+        </service>
 
         <!--
             Override BackgroundService from capacitor-plugin-backgroundservice.

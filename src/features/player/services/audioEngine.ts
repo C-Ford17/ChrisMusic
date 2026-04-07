@@ -43,6 +43,7 @@ class AudioEngine {
   private exoListeners: PluginListenerHandle[] = [];
 
   private onStateChange: StateCallback | null = null;
+  private mediaSessionActions: any = null;
   private currentSongTitle = 'ChrisMusic';
 
   private constructor() {
@@ -113,12 +114,29 @@ class AudioEngine {
       (data: ExoProgressEvent) => {
         this.exoCurrentTime = data.current;
         this.exoDuration = data.duration;
-        // Emit state so progress bar updates (same pattern as timeupdate)
         this.emit(this.getPlayerState());
       }
     );
 
-    this.exoListeners = [stateHandle, progressHandle];
+    const nextHandle = await ExoPlayerNative.addListener(
+      'onNativeNext',
+      () => {
+        if (this.mediaSessionActions?.onNext) {
+          this.mediaSessionActions.onNext();
+        }
+      }
+    );
+
+    const prevHandle = await ExoPlayerNative.addListener(
+      'onNativePrevious',
+      () => {
+        if (this.mediaSessionActions?.onPrevious) {
+          this.mediaSessionActions.onPrevious();
+        }
+      }
+    );
+
+    this.exoListeners = [stateHandle, progressHandle, nextHandle, prevHandle];
   }
 
   private emit(state: number) {

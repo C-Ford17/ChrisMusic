@@ -42,6 +42,14 @@ interface ExoPlayerPlugin {
     eventName: 'onProgress',
     listenerFunc: (data: ExoProgressEvent) => void
   ): Promise<PluginListenerHandle>;
+  addListener(
+    eventName: 'onNativeNext',
+    listenerFunc: () => void
+  ): Promise<PluginListenerHandle>;
+  addListener(
+    eventName: 'onNativePrevious',
+    listenerFunc: () => void
+  ): Promise<PluginListenerHandle>;
 }
 
 export const ExoPlayerNative = registerPlugin<ExoPlayerPlugin>('ExoPlayer');
