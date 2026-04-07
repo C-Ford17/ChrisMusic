@@ -127,34 +127,76 @@ public class YouTubeNativePlugin extends Plugin {
             return;
         }
 
+        new Thread(() -> {
+            try {
+                ensureEngineReady();
+                // web: default client, n-challenge handled by yt-dlp internally.
+                // bestaudio/best (no ext filter) so any audio format is accepted by ExoPlayer.
+                String url = tryExtractUrl(videoId, "web");
+                if (url == null || url.isEmpty()) {
+                    Log.w(TAG, "[Stream] web client failed, retrying with android...");
+                    url = tryExtractUrl(videoId, "android");
+                }
+                if (url == null || url.isEmpty()) {
+                    Log.w(TAG, "[Stream] android client failed, retrying with tv_embedded...");
+                    url = tryExtractUrl(videoId, "tv_embedded");
+                }
+                if (url == null || url.isEmpty()) {
+                    call.reject("Extraction returned empty URL after all retries");
+                    return;
+                }
+                JSObject ret = new JSObject();
+                ret.put("url", url);
+                call.resolve(ret);
+            } catch (Exception e) {
+                Log.e(TAG, "Extraction critical error: " + e.getMessage());
+                call.reject("Extraction failed: " + e.getMessage());
+            }
+        }).start();
+    }
+
+    /**
+     * Tries to extract a direct audio stream URL via yt-dlp -g.
+     * Handles multi-line output (DASH returns audio+video URLs on separate lines).
+     * Returns null if extraction fails or returns no usable URL.
+     */
+    private String tryExtractUrl(String videoId, String playerClient) {
         try {
-            ensureEngineReady();
             YoutubeDLRequest request = new YoutubeDLRequest("https://www.youtube.com/watch?v=" + videoId);
-            // El cliente 'web' suele ser el más estable para streams progresivos
-            request.addOption("-f", "bestaudio[ext=m4a]/bestaudio/best");
+            // bestaudio/best — no ext filter, ExoPlayer (Media3) handles m4a, webm, opus natively
+            request.addOption("-f", "bestaudio/best");
             request.addOption("-g");
+            request.addOption("--no-playlist");
             request.addOption("--no-check-certificate");
-            request.addOption("--no-warnings");
-            request.addOption("--extractor-args", "youtube:player-client=web");
+            // Do NOT use --no-warnings: we want stderr in logcat for debugging
+            request.addOption("--extractor-args", "youtube:player-client=" + playerClient);
             addCommonOptions(request);
-            
-            Log.d(TAG, "[Stream] Extracting URL for: " + videoId);
 
+            Log.d(TAG, "[Stream] Requesting URL for: " + videoId + " (client=" + playerClient + ")");
             YoutubeDLResponse response = YoutubeDL.getInstance().execute(request, null);
-            String url = response.getOut();
+            String out = response.getOut();
+            String err = response.getErr();
 
-            if (url == null || url.trim().isEmpty()) {
-                String err = response.getErr();
-                call.reject("Extraction returned empty URL. Log: " + (err != null ? err : "No errors in log"));
-                return;
+            // Always log stderr so we can debug extraction failures in logcat
+            if (err != null && !err.trim().isEmpty()) {
+                Log.w(TAG, "[Stream] yt-dlp stderr (" + playerClient + "): " + err.trim());
             }
 
-            JSObject ret = new JSObject();
-            ret.put("url", url.trim());
-            call.resolve(ret);
+            if (out == null || out.trim().isEmpty()) {
+                Log.w(TAG, "[Stream] Empty stdout for client=" + playerClient);
+                return null;
+            }
+
+            // yt-dlp -g may return multiple lines for DASH streams (audio+video URLs).
+            // Take only the first line — typically the audio stream.
+            String[] lines = out.trim().split("\n");
+            String audioUrl = lines[0].trim();
+            Log.d(TAG, "[Stream] Got URL (" + lines.length + " lines, client=" + playerClient + "): "
+                    + audioUrl.substring(0, Math.min(80, audioUrl.length())) + "...");
+            return audioUrl;
         } catch (Exception e) {
-            Log.e(TAG, "Extraction critical error: " + e.getMessage());
-            call.reject("Extraction failed: " + e.getMessage());
+            Log.w(TAG, "[Stream] tryExtractUrl exception (client=" + playerClient + "): " + e.getMessage());
+            return null;
         }
     }
 
@@ -166,52 +208,75 @@ public class YouTubeNativePlugin extends Plugin {
             return;
         }
 
+        new Thread(() -> {
+            try {
+                ensureEngineReady();
+
+                // Prepare temp output file
+                File tempFile = new File(getContext().getCacheDir(), videoId + ".aac");
+                if (tempFile.exists()) tempFile.delete();
+
+                // web client first, fallback to android, then tv_embedded
+                boolean downloaded = tryDownload(videoId, "web", tempFile);
+                if (!downloaded) {
+                    Log.w(TAG, "[ADTS] web download failed, retrying with android...");
+                    downloaded = tryDownload(videoId, "android", tempFile);
+                }
+                if (!downloaded) {
+                    Log.w(TAG, "[ADTS] android download failed, retrying with tv_embedded...");
+                    downloaded = tryDownload(videoId, "tv_embedded", tempFile);
+                }
+
+                if (!downloaded || !tempFile.exists() || tempFile.length() == 0) {
+                    // yt-dlp sometimes appends extension
+                    File fallback = new File(getContext().getCacheDir(), videoId + ".aac.aac");
+                    if (fallback.exists() && fallback.length() > 0) {
+                        tempFile = fallback;
+                    } else {
+                        call.reject("Extraction failed: output file missing after all retries");
+                        return;
+                    }
+                }
+
+                byte[] bytes = readFile(tempFile);
+                String base64 = Base64.encodeToString(bytes, Base64.NO_WRAP);
+
+                JSObject ret = new JSObject();
+                ret.put("base64", base64);
+                ret.put("format", "adts");
+                call.resolve(ret);
+
+                tempFile.delete();
+            } catch (Exception e) {
+                Log.e(TAG, "Native extraction error", e);
+                call.reject("Extraction failed: " + e.getMessage());
+            }
+        }).start();
+    }
+
+    private boolean tryDownload(String videoId, String playerClient, File outputFile) {
         try {
-            ensureEngineReady();
-
-            // 1. Preparar archivo temporal
-            File tempFile = new File(getContext().getCacheDir(), videoId + ".aac");
-            if (tempFile.exists()) tempFile.delete();
-
-            // 2. Usar YoutubeDL para descargar y transcodificar en UN SOLO paso
             YoutubeDLRequest request = new YoutubeDLRequest("https://www.youtube.com/watch?v=" + videoId);
             request.addOption("-f", "bestaudio/best");
-            request.addOption("-o", tempFile.getAbsolutePath());
+            request.addOption("-o", outputFile.getAbsolutePath());
+            request.addOption("--no-playlist");
+            request.addOption("--no-check-certificate");
+            // No --no-warnings: log stderr for debugging
+            request.addOption("--extractor-args", "youtube:player-client=" + playerClient);
             addCommonOptions(request);
 
-            Log.i(TAG, "Starting native yt-dlp audio extraction for " + videoId);
-            
-            // Execute (this block until finish)
-            YoutubeDL.getInstance().execute(request, null);
-            
-            Log.i(TAG, "Native extraction success");
-
-            // 3. Verificar resultado
-            if (!tempFile.exists() || tempFile.length() == 0) {
-                // yt-dlp a veces añade la extensión .aac si no la pusimos
-                File fallbackFile = new File(getContext().getCacheDir(), videoId + ".aac.aac");
-                if (fallbackFile.exists()) {
-                    tempFile = fallbackFile;
-                } else {
-                    call.reject("Extraction failed: output file missing");
-                    return;
-                }
+            Log.i(TAG, "[ADTS] Downloading " + videoId + " (client=" + playerClient + ")");
+            YoutubeDLResponse response = YoutubeDL.getInstance().execute(request, null);
+            String err = response.getErr();
+            if (err != null && !err.trim().isEmpty()) {
+                Log.w(TAG, "[ADTS] yt-dlp stderr (" + playerClient + "): " + err.trim());
             }
-
-            // 4. Leer Base64
-            byte[] bytes = readFile(tempFile);
-            String base64 = Base64.encodeToString(bytes, Base64.NO_WRAP);
-
-            JSObject ret = new JSObject();
-            ret.put("base64", base64);
-            ret.put("format", "adts");
-            call.resolve(ret);
-
-            // Cleanup
-            tempFile.delete();
+            boolean success = outputFile.exists() && outputFile.length() > 0;
+            Log.i(TAG, "[ADTS] Download " + (success ? "success" : "failed - empty file") + " (client=" + playerClient + ")");
+            return success;
         } catch (Exception e) {
-            Log.e(TAG, "Native extraction error", e);
-            call.reject("Extraction failed: " + e.getMessage());
+            Log.w(TAG, "[ADTS] tryDownload exception (client=" + playerClient + "): " + e.getMessage());
+            return false;
         }
     }
 

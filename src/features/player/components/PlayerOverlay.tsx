@@ -418,9 +418,18 @@ export function PlayerOverlay() {
                       <p className="text-lg text-black/40 dark:text-white/50 font-bold truncate">{currentSong.artistName}</p>
                         {isDebugMode && (
                           <p className="text-xs text-red-500 font-mono mt-2 bg-black/10 dark:bg-white/10 p-2 rounded-lg break-all">
-                            DEBUG SRC: {typeof window !== 'undefined' ? (audioEngine as any).htmlPlayer?.src?.substring(0, 50) + '...' : ''}<br/>
-                            HAS VIDEO FRAME: {typeof window !== 'undefined' && ((audioEngine as any).htmlPlayer as any)?.getVideoPlaybackQuality ? 'SI (Peligro 2do Plano)' : 'NO (Seguro)'}
-                            <br/>
+                            ENGINE: {typeof window !== 'undefined' && (audioEngine as any).isNativeEngine?.() ? 'ExoPlayer (Android)' : 'HTMLAudio (Web)'}<br/>
+                            {typeof window !== 'undefined' && (audioEngine as any).isNativeEngine?.() ? (
+                              <>
+                                EXO TIME: {(audioEngine as any).exoCurrentTime?.toFixed(1)}s / {(audioEngine as any).exoDuration?.toFixed(1)}s<br/>
+                                EXO PLAYING: {String((audioEngine as any).exoPlaying)}
+                              </>
+                            ) : (
+                              <>
+                                SRC: {(audioEngine as any).htmlPlayer?.src?.substring(0, 50) ?? 'undefined'}<br/>
+                                PAUSED: {String((audioEngine as any).htmlPlayer?.paused)}
+                              </>
+                            )}
                           <div className="flex gap-2">
                             <button onClick={(e) => { e.stopPropagation(); loadFormats(); }} className="mt-1.5 flex-1 bg-[#7C3AED] text-white py-1.5 rounded text-[10px] font-bold uppercase">🔎 Web</button>
                             <button onClick={(e) => { e.stopPropagation(); inspectLocalBlob(); }} className="mt-1.5 flex-1 bg-red-500 text-white py-1.5 rounded text-[10px] font-bold uppercase">🔬 Local</button>

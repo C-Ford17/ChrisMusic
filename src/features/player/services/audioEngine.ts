@@ -9,7 +9,7 @@
  *
  * State from ExoPlayer flows back via event listeners → onStateChange callback.
  */
-import { youtubeExtractionService, YouTubeExtractionService, ExoPlayerNative } from './youtubeExtractionService';
+import { youtubeExtractionService, YouTubeExtractionService, ExoPlayerNative, YouTubeNative } from './youtubeExtractionService';
 import type { ExoStateChangeEvent, ExoProgressEvent } from './youtubeExtractionService';
 import type { PluginListenerHandle } from '@capacitor/core';
 
@@ -327,26 +327,35 @@ class AudioEngine {
     autoplay: boolean,
     localUrl?: string
   ) {
-    let url = localUrl || song.streamUrl;
+    const url = localUrl || song.streamUrl;
 
     // If we have a local/offline file — load it directly
     if (url) {
+      console.log('[AudioEngine] Loading offline/local file into ExoPlayer');
       await this.callExoLoad(url, song.title, song.artistName, song.thumbnailUrl);
       if (startSeconds > 0) this.seekTo(startSeconds);
       if (!autoplay) await ExoPlayerNative.pause();
       return;
     }
 
-    // Otherwise extract via yt-dlp
+    // Otherwise extract via yt-dlp (native only — Railway URLs are not compatible with ExoPlayer)
     if (!song.id) {
       console.error('[AudioEngine] Cannot load song on Android: no ID and no URL');
+      this.emit(STATE.PAUSED);
       return;
     }
 
     try {
-      console.log(`[AudioEngine] Extracting stream URL for ${song.id} via yt-dlp...`);
-      const streamUrl = await youtubeExtractionService.getStreamUrl(song.id);
-      if (!streamUrl) throw new Error('Empty URL from yt-dlp');
+      console.log(`[AudioEngine] Requesting stream URL from native yt-dlp for ${song.id}...`);
+
+      // Call YouTubeNative directly so we skip the Railway fallback.
+      // Railway-proxied URLs often expire or lack required headers for ExoPlayer.
+      const result = await YouTubeNative.getStreamUrl({ videoId: song.id });
+      const streamUrl = result?.url;
+
+      if (!streamUrl) {
+        throw new Error('yt-dlp returned empty URL');
+      }
 
       console.log('[AudioEngine] Got stream URL, handing off to ExoPlayer');
       await this.callExoLoad(streamUrl, song.title, song.artistName, song.thumbnailUrl);
@@ -355,6 +364,8 @@ class AudioEngine {
     } catch (e) {
       console.error('[AudioEngine] ExoPlayer load failed:', e);
       this.emit(STATE.PAUSED);
+      // Throw so playerStore can show a toast
+      throw e;
     }
   }
 
@@ -475,6 +486,14 @@ class AudioEngine {
   public async isPlayingNative(): Promise<boolean> {
     if (YouTubeExtractionService.isAndroid()) return this.exoPlaying;
     return !this.htmlPlayer?.paused;
+  }
+
+  /** Returns true when playback is managed by a native engine (ExoPlayer on Android).
+   *  On native engines, play/pause events flow from the engine → JS, not the other way.
+   *  Sending play/pause commands BACK in response to those events creates a feedback loop.
+   */
+  public isNativeEngine(): boolean {
+    return YouTubeExtractionService.isAndroid();
   }
 
   public async updateMediaSessionPosition() {

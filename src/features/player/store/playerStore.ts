@@ -121,45 +121,29 @@ export const usePlayerStore = create<PlayerState>()(
         set({ 
           currentSong: song, 
           isPlaying: true, 
-          isBuffering: true, // Force immediate loading spinner
+          isBuffering: true,
           queue: [song], 
           lyrics: null, 
           progress: startSeconds 
         });
         LibraryService.recordPlay(song);
         get().fetchLyrics(song);
+
+        // Check for already-downloaded offline file first
         const finalUrl = await offlineService.getOfflineUrl(song.id);
         if (finalUrl) {
           audioEngine.loadSong(song, startSeconds, true, finalUrl);
           return;
         }
 
-        // Try local extraction for both Tauri and Capacitor
         try {
-          audioEngine.loadSong(song, startSeconds, get().isPlaying);
-          
-          // Initial aggressive cache attempt
-          // Restore strategy: Start playing remote -> Cache in background -> Swap to local
-          // Wait 2s before starting cache to avoid network collision with initial stream
-          setTimeout(() => {
-            if (get().currentSong?.id === song.id) {
-              set({ isCaching: song.id });
-              offlineService.cacheSong(song).then(async () => {
-                if (get().currentSong?.id === song.id && !audioEngine.hasLocalSource()) {
-                  const localUrl = await offlineService.getCachedUrl(song.id);
-                  if (localUrl) {
-                    console.log('[PlayerStore] Auto Hot-Swap triggered for Android stability!');
-                    audioEngine.swapSource(localUrl, get().isPlaying);
-                    toast.success('Escucha Blindada', { description: 'Listo para salir de la app' });
-                  }
-                }
-                if (get().isCaching === song.id) set({ isCaching: null });
-              }).catch(() => set({ isCaching: null }));
-            }
-          }, 2000);
+          // On Android: ExoPlayer extracts+plays natively — no ADTS caching needed.
+          // On Web/PWA: HTMLAudioElement plays the stream URL directly.
+          await audioEngine.loadSong(song, startSeconds, get().isPlaying);
         } catch (e) {
-          console.error('Unified streaming extraction failed:', e);
-          set({ isBuffering: false });
+          console.error('[PlayerStore] playSong failed:', e);
+          set({ isBuffering: false, isPlaying: false });
+          toast.error('No se pudo reproducir', { description: (e as Error)?.message });
         }
       },
 
@@ -174,39 +158,22 @@ export const usePlayerStore = create<PlayerState>()(
         });
         LibraryService.recordPlay(song);
         get().fetchLyrics(song);
+
+        // Offline/downloaded takes priority
         const offlineUrl = await offlineService.getOfflineUrl(song.id);
         if (offlineUrl) {
           audioEngine.loadSong(song, startSeconds, true, offlineUrl);
           return;
         }
-        const cachedUrl = await offlineService.getCachedUrl(song.id);
-        if (cachedUrl) {
-          audioEngine.loadSong(song, startSeconds, true, cachedUrl);
-          return;
-        }
 
         try {
-          audioEngine.loadSong(song, startSeconds, get().isPlaying);
-          
-          // Restore strategy for queue: Cache in background -> Swap to local
-          setTimeout(() => {
-            if (get().currentSong?.id === song.id) {
-              set({ isCaching: song.id });
-              offlineService.cacheSong(song).then(async () => {
-                if (get().currentSong?.id === song.id && !audioEngine.hasLocalSource()) {
-                  const localUrl = await offlineService.getCachedUrl(song.id);
-                  if (localUrl) {
-                    console.log('[PlayerStore] Auto Hot-Swap triggered (queue) for Android stability!');
-                    audioEngine.swapSource(localUrl, get().isPlaying);
-                    toast.success('Escucha Blindada', { description: 'Listo para salir de la app' });
-                  }
-                }
-                if (get().isCaching === song.id) set({ isCaching: null });
-              }).catch(() => set({ isCaching: null }));
-            }
-          }, 2000);
+          // On Android: ExoPlayer extracts+plays natively — no ADTS caching needed.
+          // On Web/PWA: HTMLAudioElement plays the stream URL directly.
+          await audioEngine.loadSong(song, startSeconds, get().isPlaying);
         } catch (e) {
-          console.error('Unified streaming extraction failed (queue):', e);
+          console.error('[PlayerStore] playSongInQueue failed:', e);
+          set({ isBuffering: false, isPlaying: false });
+          toast.error('No se pudo reproducir', { description: (e as Error)?.message });
         }
       },
 

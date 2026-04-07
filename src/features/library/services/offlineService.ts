@@ -20,10 +20,67 @@ export class OfflineService {
     return !!offlineSong;
   }
 
+  /**
+   * Returns a URL suitable for playback.
+   * - Web: blob: URL (works with HTMLAudioElement)
+   * - Android: file:// URI written to cache dir (required for ExoPlayer — it cannot
+   *   access blob: URLs that exist only in the WebView's JS context)
+   */
   async getOfflineUrl(songId: string): Promise<string | null> {
     const offlineSong = await db.offlineSongs.get(songId);
     if (!offlineSong || !offlineSong.audioBlob) return null;
+    if (YouTubeExtractionService.isAndroid()) {
+      return this.blobToNativeFileUri(offlineSong.audioBlob, `offline_${songId}`);
+    }
     return URL.createObjectURL(offlineSong.audioBlob);
+  }
+
+  /**
+   * Converts a Blob to a native file:// URI via @capacitor/filesystem.
+   * Written to Directory.Cache so the OS can reclaim space if needed.
+   * Returns null and logs on failure.
+   */
+  private async blobToNativeFileUri(blob: Blob, fileName: string): Promise<string | null> {
+    try {
+      const { Filesystem, Directory } = await import('@capacitor/filesystem');
+
+      // Determine extension from MIME type
+      const ext = blob.type.includes('webm') ? 'webm'
+                : blob.type.includes('ogg')  ? 'ogg'
+                : 'aac'; // default for audio/aac or audio/mp4
+      const fullName = `${fileName}.${ext}`;
+
+      // Convert Blob → base64
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          // Strip data:...;base64, prefix
+          resolve(result.split(',')[1]);
+        };
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(blob);
+      });
+
+      // Write to cache
+      await Filesystem.writeFile({
+        path: fullName,
+        data: base64,
+        directory: Directory.Cache,
+      });
+
+      // Get native URI (file:///data/user/0/...)
+      const { uri } = await Filesystem.getUri({
+        path: fullName,
+        directory: Directory.Cache,
+      });
+
+      console.log('[OfflineService] Written offline file to:', uri);
+      return uri;
+    } catch (e) {
+      console.error('[OfflineService] blobToNativeFileUri failed:', e);
+      return null;
+    }
   }
 
   /**
@@ -155,6 +212,9 @@ export class OfflineService {
   async getCachedUrl(songId: string): Promise<string | null> {
     const cached = await db.cachedSongs.get(songId);
     if (!cached || !cached.audioBlob) return null;
+    if (YouTubeExtractionService.isAndroid()) {
+      return this.blobToNativeFileUri(cached.audioBlob, `cached_${songId}`);
+    }
     return URL.createObjectURL(cached.audioBlob);
   }
 
