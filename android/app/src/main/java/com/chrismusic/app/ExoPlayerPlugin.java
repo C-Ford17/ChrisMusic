@@ -246,30 +246,46 @@ public class ExoPlayerPlugin extends Plugin {
             }
 
             @Override
+            public boolean hasNextMediaItem() {
+                return true;
+            }
+
+            @Override
+            public boolean hasPreviousMediaItem() {
+                return true;
+            }
+
+            @Override
             public void seekToNext() {
-                notifyListeners("onNativeNext", new JSObject());
+                new Handler(Looper.getMainLooper()).post(() -> notifyListeners("onNativeNext", new JSObject()));
             }
 
             @Override
             public void seekToNextMediaItem() {
-                notifyListeners("onNativeNext", new JSObject());
+                new Handler(Looper.getMainLooper()).post(() -> notifyListeners("onNativeNext", new JSObject()));
             }
 
             @Override
             public void seekToPrevious() {
-                notifyListeners("onNativePrevious", new JSObject());
+                new Handler(Looper.getMainLooper()).post(() -> notifyListeners("onNativePrevious", new JSObject()));
             }
 
             @Override
             public void seekToPreviousMediaItem() {
-                notifyListeners("onNativePrevious", new JSObject());
+                new Handler(Looper.getMainLooper()).post(() -> notifyListeners("onNativePrevious", new JSObject()));
             }
+
         };
 
         // Pass forwardingPlayer to MediaSession instead of exoPlayer
         mediaSession = new MediaSession.Builder(context, forwardingPlayer).build();
 
         exoPlayer.addListener(new Player.Listener() {
+            @Override
+            public void onIsPlayingChanged(boolean isPlaying) {
+                notifyStateChange(isPlaying ? "playing" : "paused");
+            }
+
             @Override
             public void onPlaybackStateChanged(int playbackState) {
                 switch (playbackState) {
@@ -289,10 +305,7 @@ public class ExoPlayerPlugin extends Plugin {
                 }
             }
 
-            @Override
-            public void onIsPlayingChanged(boolean isPlaying) {
-                notifyStateChange(isPlaying ? "playing" : "paused");
-            }
+
 
             @Override
             public void onPlayerError(PlaybackException error) {
