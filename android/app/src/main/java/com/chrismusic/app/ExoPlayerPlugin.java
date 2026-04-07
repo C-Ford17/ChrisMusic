@@ -105,14 +105,7 @@ public class ExoPlayerPlugin extends Plugin {
                 exoPlayer.setPlayWhenReady(true);
 
                 notifyStateChange("loading");
-                
-                // Request notification permission if needed (Android 13+)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    if (getPermissionState("notifications") != PermissionState.GRANTED) {
-                        requestPermissionForAlias("notifications", call, "checkNotificationPermission");
-                        // We continue, but the notification might not show until granted
-                    }
-                }
+
 
                 startMusicService(title, artist);
                 startProgressPolling();

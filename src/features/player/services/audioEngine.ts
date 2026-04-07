@@ -366,6 +366,9 @@ class AudioEngine {
     try {
       console.log(`[AudioEngine] Requesting stream URL from native yt-dlp for ${song.id}...`);
 
+      // Force UI back to loading state immediately after reset() to mask extraction delay
+      this.emit(3); // STATE.LOADING (3)
+
       // Call YouTubeNative directly so we skip the Railway fallback.
       // Railway-proxied URLs often expire or lack required headers for ExoPlayer.
       const result = await YouTubeNative.getStreamUrl({ videoId: song.id });
@@ -438,6 +441,8 @@ class AudioEngine {
     onNext?: () => void;
     onPrevious?: () => void;
   }) {
+    this.mediaSessionActions = actions;
+    
     // ExoPlayer on Android: media session is managed natively by MusicPlayerService.
     // JS MediaSession hooks are still wired for web fallback.
     if (YouTubeExtractionService.isCapacitor()) {
