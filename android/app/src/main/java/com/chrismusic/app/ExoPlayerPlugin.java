@@ -1,5 +1,6 @@
 package com.chrismusic.app;
 
+import android.Manifest;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
@@ -8,6 +9,7 @@ import android.os.Looper;
 import android.util.Log;
 
 import androidx.annotation.OptIn;
+import androidx.media3.common.ForwardingPlayer;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MediaMetadata;
 import androidx.media3.common.PlaybackException;
@@ -21,23 +23,18 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.PermissionState;
 
-/**
- * ExoPlayerPlugin — Capacitor bridge to Media3 ExoPlayer.
- *
- * JS API:
- *   load({ url, title, artist, artwork? })
- *   play()
- *   pause()
- *   seek({ seconds })
- *   stop()
- *   setVolume({ volume })   // 0.0–1.0
- *
- * Events emitted to JS:
- *   "onStateChange" → { state: "loading" | "playing" | "paused" | "ended" | "error", error?: string }
- *   "onProgress"    → { current: number, duration: number }
- */
-@CapacitorPlugin(name = "ExoPlayer")
+@CapacitorPlugin(
+    name = "ExoPlayer",
+    permissions = {
+        @Permission(
+            alias = "notifications",
+            strings = {Manifest.permission.POST_NOTIFICATIONS}
+        )
+    }
+)
 public class ExoPlayerPlugin extends Plugin {
 
     private static final String TAG = "ExoPlayerPlugin";
@@ -108,6 +105,15 @@ public class ExoPlayerPlugin extends Plugin {
                 exoPlayer.setPlayWhenReady(true);
 
                 notifyStateChange("loading");
+                
+                // Request notification permission if needed (Android 13+)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    if (getPermissionState("notifications") != PermissionState.GRANTED) {
+                        requestPermissionForAlias("notifications", call, "checkNotificationPermission");
+                        // We continue, but the notification might not show until granted
+                    }
+                }
+
                 startMusicService(title, artist);
                 startProgressPolling();
 
@@ -215,35 +221,53 @@ public class ExoPlayerPlugin extends Plugin {
 
         exoPlayer = new ExoPlayer.Builder(context).build();
 
-        // Create MediaSession
-        MediaSession.Callback callback = new MediaSession.Callback() {
+        // Wrap ExoPlayer in a ForwardingPlayer
+        // Since we manage the queue in JS, ExoPlayer only has 1 item.
+        // Media3 normally hides Next/Prev buttons if queue is 1.
+        // ForwardingPlayer tricks it into always showing them and intercepts clicks.
+        ForwardingPlayer forwardingPlayer = new ForwardingPlayer(exoPlayer) {
             @Override
-            public androidx.media3.session.MediaSession.ConnectionResult onConnect(MediaSession session, MediaSession.ControllerInfo controller) {
-                return new MediaSession.ConnectionResult.AcceptedResultBuilder(session).build();
+            public Player.Commands getAvailableCommands() {
+                return super.getAvailableCommands().buildUpon()
+                        .add(Player.COMMAND_SEEK_TO_NEXT)
+                        .add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+                        .add(Player.COMMAND_SEEK_TO_PREVIOUS)
+                        .add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+                        .build();
             }
 
             @Override
-            public com.google.common.util.concurrent.ListenableFuture<androidx.media3.session.SessionResult> onCustomCommand(MediaSession session, MediaSession.ControllerInfo controller, androidx.media3.session.SessionCommand customCommand, android.os.Bundle args) {
-                return com.google.common.util.concurrent.Futures.immediateFuture(new androidx.media3.session.SessionResult(androidx.media3.session.SessionResult.RESULT_SUCCESS));
+            public boolean isCommandAvailable(int command) {
+                if (command == Player.COMMAND_SEEK_TO_NEXT || command == Player.COMMAND_SEEK_TO_PREVIOUS ||
+                    command == Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM || command == Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM) {
+                    return true;
+                }
+                return super.isCommandAvailable(command);
+            }
+
+            @Override
+            public void seekToNext() {
+                notifyListeners("onNativeNext", new JSObject());
+            }
+
+            @Override
+            public void seekToNextMediaItem() {
+                notifyListeners("onNativeNext", new JSObject());
+            }
+
+            @Override
+            public void seekToPrevious() {
+                notifyListeners("onNativePrevious", new JSObject());
+            }
+
+            @Override
+            public void seekToPreviousMediaItem() {
+                notifyListeners("onNativePrevious", new JSObject());
             }
         };
 
-        mediaSession = new MediaSession.Builder(context, exoPlayer)
-                .setCallback(new MediaSession.Callback() {
-                    @Override
-                    public int onPlayerCommandRequest(MediaSession session, MediaSession.ControllerInfo controller, int playerCommand) {
-                        if (playerCommand == Player.COMMAND_SEEK_TO_NEXT || playerCommand == Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM) {
-                            notifyListeners("onNativeNext", new JSObject());
-                            return Player.COMMAND_INVALID; // Prevent ExoPlayer from seeking internally
-                        }
-                        if (playerCommand == Player.COMMAND_SEEK_TO_PREVIOUS || playerCommand == Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM) {
-                            notifyListeners("onNativePrevious", new JSObject());
-                            return Player.COMMAND_INVALID; // Prevent ExoPlayer from seeking internally
-                        }
-                        return playerCommand;
-                    }
-                })
-                .build();
+        // Pass forwardingPlayer to MediaSession instead of exoPlayer
+        mediaSession = new MediaSession.Builder(context, forwardingPlayer).build();
 
         exoPlayer.addListener(new Player.Listener() {
             @Override
@@ -327,7 +351,11 @@ public class ExoPlayerPlugin extends Plugin {
             intent.putExtra("title", title);
             intent.putExtra("artist", artist);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent);
+                // Media3 MediaSessionService automatically handles foregrounding when playback starts.
+                // Using startForegroundService here forces us to show a notification immediately,
+                // which crashes in Android 14 if Media3 hasn't prepared the media yet.
+                // Therefore, we use startService.
+                context.startService(intent);
             } else {
                 context.startService(intent);
             }
