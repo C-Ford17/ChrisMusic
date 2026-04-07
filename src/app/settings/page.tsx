@@ -18,6 +18,7 @@ import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { usePlayerStore } from '@/features/player/store/playerStore';
 import { MaintenanceService } from '@/features/library/services/maintenanceService';
+import { youtubeExtractionService } from '@/features/player/services/youtubeExtractionService';
 import { useState, useEffect } from 'react';
 
 export default function SettingsPage() {
@@ -30,13 +31,27 @@ export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
 
   const [cookieText, setCookieText] = useState('');
+  const [poToken, setPoToken] = useState('');
+  const [visitorData, setVisitorData] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
   const [isSavingLocal, setIsSavingLocal] = useState(false);
   const [isTauri, setIsTauri] = useState(false);
 
   useEffect(() => {
     setIsTauri(typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__);
+    // Load existing tokens
+    setPoToken(localStorage.getItem('yt_po_token') || '');
+    setVisitorData(localStorage.getItem('yt_visitor_data') || '');
   }, []);
+
+  const handleSaveTokens = async () => {
+    try {
+      await youtubeExtractionService.updateTokens(poToken, visitorData);
+      toast.success('Tokens de YouTube actualizados correctamente');
+    } catch (err) {
+      toast.error('Error al actualizar tokens');
+    }
+  };
 
   const handleSaveCookiesLocal = async () => {
     if (!cookieText.trim()) {
@@ -156,8 +171,7 @@ export default function SettingsPage() {
 
   const handleClearCache = async () => {
     if (confirm('¿Limpiar caché temporal? (Las descargas permanentes NO se borran)')) {
-      await db.cachedSongs.clear();
-      toast.success('Caché limpiado', { description: 'Las descargas permanentes están intactas.' });
+      await MaintenanceService.clearAppCache();
     }
   };
 
@@ -403,10 +417,60 @@ export default function SettingsPage() {
           </div>
         </section>
 
-      {/* Desarrollador */}
+        {/* Configuración Avanzada YouTube (PO Token) */}
+        <section className="animate-in fade-in slide-in-from-bottom-10 duration-1000">
+          <h2 className="text-xs font-black text-[#7C3AED] uppercase tracking-[0.2em] mb-5 px-3 flex items-center gap-3">
+            <ShieldCheck size={16} /> YouTube Independiente (Android)
+          </h2>
+          <div className="bg-black/5 dark:bg-white/5 rounded-[32px] overflow-hidden border border-black/10 dark:border-white/10 shadow-sm p-8 space-y-6">
+            <div>
+              <p className="font-black text-lg text-black/80 dark:text-white/90 tracking-tight">Tokens de Identidad (PO Token)</p>
+              <p className="text-sm font-bold text-black/30 dark:text-white/40 mt-1">
+                Necesario para reproducir videos musicales en Android sin usar Railway.
+              </p>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-black/40 dark:text-white/40 mb-2 block px-1">PO Token</label>
+                <input
+                  type="text"
+                  className="w-full bg-black/5 dark:bg-black/40 border border-black/10 dark:border-white/10 rounded-xl p-4 text-[10px] font-mono text-black/80 dark:text-white/80 focus:ring-2 focus:ring-[#7C3AED] outline-none"
+                  placeholder="PO_TOKEN..."
+                  value={poToken}
+                  onChange={(e) => setPoToken(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-black/40 dark:text-white/40 mb-2 block px-1">Visitor Data</label>
+                <input
+                  type="text"
+                  className="w-full bg-black/5 dark:bg-black/40 border border-black/10 dark:border-white/10 rounded-xl p-4 text-[10px] font-mono text-black/80 dark:text-white/80 focus:ring-2 focus:ring-[#7C3AED] outline-none"
+                  placeholder="VISITOR_DATA..."
+                  value={visitorData}
+                  onChange={(e) => setVisitorData(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <button
+              onClick={handleSaveTokens}
+              className="w-full py-4 bg-white dark:bg-white text-black rounded-2xl text-[10px] font-black uppercase tracking-widest hover:scale-[1.02] active:scale-95 transition-all shadow-lg"
+            >
+              Guardar Configuración Local
+            </button>
+            
+            <p className="text-[9px] font-bold text-black/20 dark:text-white/20 uppercase tracking-widest text-center">
+              Estos valores son específicos de tu dispositivo y IP.
+            </p>
+          </div>
+        </section>
+
+      {/* Desarrollador & Diagnóstico */}
       <section className="animate-in fade-in slide-in-from-bottom-10 duration-1000">
         <h2 className="text-xs font-black text-orange-400 uppercase tracking-[0.2em] mb-5 px-3 flex items-center gap-3">
-          <Bug size={16} /> Desarrollador
+          <Bug size={16} /> Desarrollador & Diagnóstico
         </h2>
         <div className="bg-black/5 dark:bg-white/5 rounded-[32px] overflow-hidden border border-black/10 dark:border-white/10 shadow-sm">
           <div
@@ -426,6 +490,49 @@ export default function SettingsPage() {
               <div className={`w-5 h-5 bg-white rounded-full shadow-lg transition-all transform ${isDebugMode ? 'translate-x-7' : 'translate-x-0'}`} />
             </div>
           </div>
+
+          <button
+            onClick={async () => {
+              const diag = await youtubeExtractionService.getDiagnostics();
+              console.log('NATIVE DIAGNOSTICS:', diag);
+              alert('Diagnóstico copiado a consola. Archivos encontrados: ' + (diag.no_backup_files?.length + diag.files_files?.length));
+            }}
+            className="w-full flex items-center justify-between p-8 hover:bg-white dark:hover:bg-white/2 transition-all text-left border-t border-black/5 dark:border-white/5 group"
+          >
+            <div className="flex items-center gap-5">
+              <div className="p-4 bg-[#7C3AED]/10 text-[#7C3AED] rounded-2xl group-hover:bg-[#7C3AED] group-hover:text-white transition-all">
+                <DatabaseZap size={24} />
+              </div>
+              <div>
+                <p className="font-black text-lg tracking-tight">Diagnóstico Nativo</p>
+                <p className="text-sm font-bold text-black/30 mt-0.5 uppercase tracking-widest text-[10px]">Ver archivos internos (Logcat)</p>
+              </div>
+            </div>
+          </button>
+          <button
+            onClick={async () => {
+              if (confirm('Esto forzará la extracción de los binarios nativos. ¿Continuar?')) {
+                try {
+                  const { YouTubeNative } = await import('@/features/player/services/youtubeExtractionService');
+                  await YouTubeNative.forceReextraction();
+                  toast.success('Extracción completada correctamente');
+                } catch (err: any) {
+                  toast.error('Fallo en la extracción: ' + err.message);
+                }
+              }
+            }}
+            className="w-full flex items-center justify-between p-8 hover:bg-white dark:hover:bg-white/2 transition-all text-left border-t border-black/5 dark:border-white/5 group"
+          >
+            <div className="flex items-center gap-5">
+              <div className="p-4 bg-red-500/10 text-red-500 rounded-2xl group-hover:bg-red-500 group-hover:text-white transition-all">
+                <Sparkles size={16} />
+              </div>
+              <div>
+                <p className="font-black text-lg tracking-tight">Forzar Re-Extracción</p>
+                <p className="text-sm font-bold text-black/30 mt-0.5 uppercase tracking-widest text-[10px]">Reparar binarios dañados</p>
+              </div>
+            </div>
+          </button>
         </div>
       </section>
 

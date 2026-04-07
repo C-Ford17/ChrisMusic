@@ -3,8 +3,9 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { type Song } from '@/core/types/music';
 import { LibraryService } from '@/features/library/services/libraryService';
 import { lyricsService, type LyricsLine, type LyricsData } from '@/features/lyrics/services/lrclibService';
-import { OfflineService } from '@/features/library/services/offlineService';
+import { offlineService } from '@/features/library/services/offlineService';
 import { audioEngine } from '@/features/player/services/audioEngine';
+import { youtubeExtractionService } from '@/features/player/services/youtubeExtractionService';
 import { toast } from 'sonner';
 
 interface PlayerState {
@@ -82,8 +83,8 @@ export const usePlayerStore = create<PlayerState>()(
         const { downloadingSongs } = get();
         if (downloadingSongs.has(song.id)) return;
 
-        if (await OfflineService.isDownloaded(song.id)) {
-          await OfflineService.removeDownload(song.id);
+        if (await offlineService.isDownloaded(song.id)) {
+          await offlineService.removeDownload(song.id);
           toast.success('Descarga eliminada');
           set({ downloadingSongs: new Set(get().downloadingSongs) });
           return;
@@ -94,7 +95,7 @@ export const usePlayerStore = create<PlayerState>()(
         }));
 
         try {
-          await OfflineService.downloadSong(song);
+          await offlineService.downloadSong(song);
           toast.success('Canción descargada', { description: song.title });
         } catch (error) {
           console.error(error);
@@ -120,68 +121,45 @@ export const usePlayerStore = create<PlayerState>()(
         set({ 
           currentSong: song, 
           isPlaying: true, 
-          isBuffering: true, 
+          isBuffering: true, // Force immediate loading spinner
           queue: [song], 
           lyrics: null, 
           progress: startSeconds 
         });
         LibraryService.recordPlay(song);
         get().fetchLyrics(song);
-        const finalUrl = await OfflineService.getOfflineUrl(song.id);
+        const finalUrl = await offlineService.getOfflineUrl(song.id);
         if (finalUrl) {
           audioEngine.loadSong(song, startSeconds, true, finalUrl);
           return;
         }
 
-        // --- CORRECCIÓN: No cargar todavía, esperar a la extracción ---
-        const isTauri = typeof window !== 'undefined' && (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
-        if (isTauri) {
-          try {
-            const { invoke } = await import('@tauri-apps/api/core');
-            const streamUrl = await invoke('get_streaming_url', { videoId: song.id });
-            if (get().currentSong?.id === song.id && streamUrl) {
-              audioEngine.loadSong(song, startSeconds, get().isPlaying, streamUrl as string);
-              OfflineService.cacheSong(song);
-            }
-          } catch (e) {
-            console.error('Tauri streaming extraction failed:', e);
-          }
-        } else {
-          try {
-            const { CapacitorHttp } = await import('@capacitor/core');
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.195:5000";
-            const response = await CapacitorHttp.get({
-              url: `${apiUrl}/stream`,
-              params: { id: song.id }
-            });
-            if (response.status === 200 && response.data.url) {
-              if (get().currentSong?.id === song.id) {
-                audioEngine.loadSong(song, startSeconds, get().isPlaying, response.data.url);
-                
-                // Aggressive cache + Auto Swap
-                set({ isCaching: song.id });
-                OfflineService.cacheSong(song).then(async () => {
-                  // Swap to local blob if same song still playing and not already local
-                  if (get().currentSong?.id === song.id && !audioEngine.hasLocalSource()) {
-                    const localUrl = await OfflineService.getCachedUrl(song.id);
-                    if (localUrl) {
-                      console.log('[PlayerStore] Auto Hot-Swap triggered!');
-                      audioEngine.swapSource(localUrl, get().isPlaying);
-                    }
+        // Try local extraction for both Tauri and Capacitor
+        try {
+          audioEngine.loadSong(song, startSeconds, get().isPlaying);
+          
+          // Initial aggressive cache attempt
+          // Restore strategy: Start playing remote -> Cache in background -> Swap to local
+          // Wait 2s before starting cache to avoid network collision with initial stream
+          setTimeout(() => {
+            if (get().currentSong?.id === song.id) {
+              set({ isCaching: song.id });
+              offlineService.cacheSong(song).then(async () => {
+                if (get().currentSong?.id === song.id && !audioEngine.hasLocalSource()) {
+                  const localUrl = await offlineService.getCachedUrl(song.id);
+                  if (localUrl) {
+                    console.log('[PlayerStore] Auto Hot-Swap triggered for Android stability!');
+                    audioEngine.swapSource(localUrl, get().isPlaying);
+                    toast.success('Escucha Blindada', { description: 'Listo para salir de la app' });
                   }
-                  if (get().isCaching === song.id) {
-                    set({ isCaching: null });
-                    toast.success('✅ Canción en caché', { 
-                      description: 'Cambio automático a modo seguro — ya puedes salir.',
-                      duration: 4000
-                    });
-                  }
-                }).catch(() => set({ isCaching: null }));
-              }
+                }
+                if (get().isCaching === song.id) set({ isCaching: null });
+              }).catch(() => set({ isCaching: null }));
             }
-          } catch (e) {
-            console.error('Capacitor streaming extraction failed:', e);
-          }
+          }, 2000);
+        } catch (e) {
+          console.error('Unified streaming extraction failed:', e);
+          set({ isBuffering: false });
         }
       },
 
@@ -196,64 +174,39 @@ export const usePlayerStore = create<PlayerState>()(
         });
         LibraryService.recordPlay(song);
         get().fetchLyrics(song);
-        const offlineUrl = await OfflineService.getOfflineUrl(song.id);
+        const offlineUrl = await offlineService.getOfflineUrl(song.id);
         if (offlineUrl) {
           audioEngine.loadSong(song, startSeconds, true, offlineUrl);
           return;
         }
-        const cachedUrl = await OfflineService.getCachedUrl(song.id);
+        const cachedUrl = await offlineService.getCachedUrl(song.id);
         if (cachedUrl) {
           audioEngine.loadSong(song, startSeconds, true, cachedUrl);
           return;
         }
-        const isTauri = typeof window !== 'undefined' && (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
-        if (isTauri) {
-          try {
-            const { invoke } = await import('@tauri-apps/api/core');
-            const streamUrl = await invoke('get_streaming_url', { videoId: song.id });
-            if (get().currentSong?.id === song.id && streamUrl) {
-              audioEngine.loadSong(song, startSeconds, get().isPlaying, streamUrl as string);
-              OfflineService.cacheSong(song);
-            }
-          } catch (e) {
-            console.error('Tauri streaming extraction failed:', e);
-          }
-        } else {
-          try {
-            const { CapacitorHttp } = await import('@capacitor/core');
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.195:5000";
-            const response = await CapacitorHttp.get({
-              url: `${apiUrl}/stream`,
-              params: { id: song.id }
-            });
-            if (response.status === 200 && response.data.url) {
-              if (get().currentSong?.id === song.id) {
-                audioEngine.loadSong(song, startSeconds, get().isPlaying, response.data.url);
-                
-                // Aggressive cache + Auto Swap
-                set({ isCaching: song.id });
-                OfflineService.cacheSong(song).then(async () => {
-                  // Swap to local blob if same song still playing and not already local
-                  if (get().currentSong?.id === song.id && !audioEngine.hasLocalSource()) {
-                    const localUrl = await OfflineService.getCachedUrl(song.id);
-                    if (localUrl) {
-                      console.log('[PlayerStore] Auto Hot-Swap triggered (queue)!');
-                      audioEngine.swapSource(localUrl, get().isPlaying);
-                    }
+
+        try {
+          audioEngine.loadSong(song, startSeconds, get().isPlaying);
+          
+          // Restore strategy for queue: Cache in background -> Swap to local
+          setTimeout(() => {
+            if (get().currentSong?.id === song.id) {
+              set({ isCaching: song.id });
+              offlineService.cacheSong(song).then(async () => {
+                if (get().currentSong?.id === song.id && !audioEngine.hasLocalSource()) {
+                  const localUrl = await offlineService.getCachedUrl(song.id);
+                  if (localUrl) {
+                    console.log('[PlayerStore] Auto Hot-Swap triggered (queue) for Android stability!');
+                    audioEngine.swapSource(localUrl, get().isPlaying);
+                    toast.success('Escucha Blindada', { description: 'Listo para salir de la app' });
                   }
-                  if (get().isCaching === song.id) {
-                    set({ isCaching: null });
-                    toast.success('✅ Canción en caché', { 
-                      description: 'Cambio automático a modo seguro — ya puedes salir.',
-                      duration: 4000
-                    });
-                  }
-                }).catch(() => set({ isCaching: null }));
-              }
+                }
+                if (get().isCaching === song.id) set({ isCaching: null });
+              }).catch(() => set({ isCaching: null }));
             }
-          } catch (e) {
-            console.error('Capacitor streaming extraction failed:', e);
-          }
+          }, 2000);
+        } catch (e) {
+          console.error('Unified streaming extraction failed (queue):', e);
         }
       },
 
@@ -286,9 +239,13 @@ export const usePlayerStore = create<PlayerState>()(
           return;
         }
         set({ isPlaying: true });
+        audioEngine.play();
       },
 
-      pause: () => set({ isPlaying: false }),
+      pause: () => {
+        set({ isPlaying: false });
+        audioEngine.pause();
+      },
 
       togglePlayPause: () => {
         const { isPlaying } = get();
@@ -365,7 +322,10 @@ export const usePlayerStore = create<PlayerState>()(
         }
       },
 
-      setVolume: (volume: number) => set({ volume }),
+      setVolume: (volume: number) => {
+        set({ volume });
+        audioEngine.setVolume(volume);
+      },
       setProgress: (progress: number) => set({ progress }),
       setDuration: (duration: number) => set({ duration }),
       seekTo: (time: number) => {
@@ -467,3 +427,10 @@ export const usePlayerStore = create<PlayerState>()(
     }
   )
 );
+
+// Initial initialization for Native Android/Tauri engine
+if (typeof window !== 'undefined') {
+  youtubeExtractionService.ensureInitialized().catch((err: any) => {
+    console.log('[PlayerStore] Initial native init deferred or failed:', err);
+  });
+}

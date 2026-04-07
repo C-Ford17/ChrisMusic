@@ -1,62 +1,68 @@
 /**
  * AudioEngine Service (Singleton)
  * Centralizes all playback logic for ChrisMusic.
- * Integrates with Capacitor MediaSession for native Android notifications.
  *
- * - **Cambio**: El botón "Play" ahora detecta si la sesión fue restaurada y solicita automáticamente un nuevo enlace de streaming si es necesario, retomando exactamente desde el segundo donde te quedaste.
+ * ExoPlayer strategy (feature/exoplayer branch):
+ *   - On Android: delegates ALL playback to ExoPlayerNative plugin (Media3 ExoPlayer).
+ *     HTMLAudioElement is NOT used on Android.
+ *   - On Web/PWA: uses HTMLAudioElement as before.
  *
- * ## 5. Notificación Nativa y Segundo Plano (Android)
- * Hemos implementado una solución robusta para que la música no se detenga y la notificación sea siempre visible:
- * - **Plugins Nativos**: Integramos `@jofr/capacitor-media-session` y `capacitor-plugin-backgroundservice`.
- * - **Foreground Service**: La app ahora corre como un "Servicio de Primer Plano" (mediaPlayback), lo que evita que Android la cierre al bloquear el teléfono.
- * - **Permisos**: Añadimos permisos de `POST_NOTIFICATIONS` y `FOREGROUND_SERVICE` para cumplir con las últimas versiones de Android (13 y 14).
- *
- * ## 6. Descargas de Alta Velocidad (CapacitorHttp)
+ * State from ExoPlayer flows back via event listeners → onStateChange callback.
  */
+import { youtubeExtractionService, YouTubeExtractionService, ExoPlayerNative } from './youtubeExtractionService';
+import type { ExoStateChangeEvent, ExoProgressEvent } from './youtubeExtractionService';
+import type { PluginListenerHandle } from '@capacitor/core';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type StateCallback = (state: number) => void;
+
+/**
+ * Player state codes (same as before for store compatibility):
+ * 0 = ended, 1 = playing, 2 = paused, 3 = loading/buffering
+ */
+const STATE = {
+  ENDED: 0,
+  PLAYING: 1,
+  PAUSED: 2,
+  LOADING: 3,
+} as const;
+
+// ─── AudioEngine ──────────────────────────────────────────────────────────────
+
 class AudioEngine {
   private static instance: AudioEngine;
-  private htmlPlayer: HTMLAudioElement | null = null;
-  public isReady = false;
-  private volume = 1;
-  private onStateChange: ((state: number) => void) | null = null;
 
+  // Web fallback
+  private htmlPlayer: HTMLAudioElement | null = null;
+
+  // ExoPlayer state tracking
+  private exoCurrentTime = 0;
+  private exoDuration = 0;
+  private exoPlaying = false;
+  private exoListeners: PluginListenerHandle[] = [];
+
+  private onStateChange: StateCallback | null = null;
+  private currentSongTitle = 'ChrisMusic';
 
   private constructor() {
-    if (typeof window !== 'undefined') {
+    if (typeof window === 'undefined') return;
+
+    if (YouTubeExtractionService.isAndroid()) {
+      // Android: wire up ExoPlayer event listeners (async — fire and forget)
+      this.attachExoListeners();
+    } else {
+      // Web/PWA: use HTMLAudioElement
       this.htmlPlayer = new Audio();
-      this.isReady = true;
-      this.htmlPlayer.addEventListener('ended', () => {
-        if (this.onStateChange) this.onStateChange(0); // State 0 = Ended
-      });
-      this.htmlPlayer.addEventListener('play', () => {
-        if (this.onStateChange) this.onStateChange(1); // State 1 = Playing
-      });
-      this.htmlPlayer.addEventListener('pause', () => {
-        if (this.onStateChange) this.onStateChange(2); // State 2 = Paused
-      });
-      this.htmlPlayer.addEventListener('loadedmetadata', () => {
-        if (this.onStateChange) this.onStateChange(1);
-      });
-      this.htmlPlayer.addEventListener('waiting', () => {
-        if (this.onStateChange) this.onStateChange(3); // State 3 = Buffering
-      });
-      this.htmlPlayer.addEventListener('playing', () => {
-        if (this.onStateChange) this.onStateChange(1); // State 1 = Playing
-      });
-      this.htmlPlayer.addEventListener('canplay', () => {
-        if (this.onStateChange) this.onStateChange(1); // State 1 = Playing
-      });
-      this.htmlPlayer.addEventListener('timeupdate', () => {
-        if (this.onStateChange) this.onStateChange(this.getPlayerState());
-      });
+      this.htmlPlayer.addEventListener('ended', () => this.emit(STATE.ENDED));
+      this.htmlPlayer.addEventListener('play', () => this.emit(STATE.PLAYING));
+      this.htmlPlayer.addEventListener('pause', () => this.emit(STATE.PAUSED));
+      this.htmlPlayer.addEventListener('waiting', () => this.emit(STATE.LOADING));
+      this.htmlPlayer.addEventListener('playing', () => this.emit(STATE.PLAYING));
+      this.htmlPlayer.addEventListener('canplay', () => this.emit(STATE.PLAYING));
+      this.htmlPlayer.addEventListener('timeupdate', () => this.emit(this.getPlayerState()));
     }
   }
-
-
-  public setOnStateChange(callback: (state: number) => void) {
-    this.onStateChange = callback;
-  }
-
 
   public static getInstance(): AudioEngine {
     if (!AudioEngine.instance) {
@@ -65,91 +71,186 @@ class AudioEngine {
     return AudioEngine.instance;
   }
 
+  // ─── Event wiring ──────────────────────────────────────────────────────────
 
-  private async updateMediaSessionState(state: 'playing' | 'paused' | 'none') {
-    const isMobile = typeof window !== 'undefined' && (window as any).Capacitor;
-    if (isMobile) {
-      try {
-        const { MediaSession: CapMediaSession } = await import('@jofr/capacitor-media-session');
-        await CapMediaSession.setPlaybackState({ playbackState: state });
-      } catch (e) { }
+  private async attachExoListeners() {
+    // Remove old listeners first (hot-reload safety)
+    for (const handle of this.exoListeners) {
+      await handle.remove();
     }
-    if ('mediaSession' in navigator) {
-      navigator.mediaSession.playbackState = state;
-    }
+    this.exoListeners = [];
+
+    const stateHandle = await ExoPlayerNative.addListener(
+      'onStateChange',
+      (data: ExoStateChangeEvent) => {
+        switch (data.state) {
+          case 'playing':
+            this.exoPlaying = true;
+            this.emit(STATE.PLAYING);
+            break;
+          case 'paused':
+            this.exoPlaying = false;
+            this.emit(STATE.PAUSED);
+            break;
+          case 'loading':
+            this.emit(STATE.LOADING);
+            break;
+          case 'ended':
+            this.exoPlaying = false;
+            this.emit(STATE.ENDED);
+            break;
+          case 'error':
+            this.exoPlaying = false;
+            this.emit(STATE.PAUSED);
+            console.error('[AudioEngine] ExoPlayer error:', data.error);
+            break;
+        }
+      }
+    );
+
+    const progressHandle = await ExoPlayerNative.addListener(
+      'onProgress',
+      (data: ExoProgressEvent) => {
+        this.exoCurrentTime = data.current;
+        this.exoDuration = data.duration;
+        // Emit state so progress bar updates (same pattern as timeupdate)
+        this.emit(this.getPlayerState());
+      }
+    );
+
+    this.exoListeners = [stateHandle, progressHandle];
   }
 
+  private emit(state: number) {
+    if (this.onStateChange) this.onStateChange(state);
+  }
+
+  public setOnStateChange(callback: StateCallback) {
+    this.onStateChange = callback;
+  }
+
+  // ─── Core playback API ─────────────────────────────────────────────────────
 
   public async play() {
+    if (YouTubeExtractionService.isAndroid()) {
+      try {
+        await ExoPlayerNative.play();
+      } catch (e) {
+        console.error('[AudioEngine] ExoPlayer play error:', e);
+      }
+      return;
+    }
+
+    // Web fallback
     try {
-      if (this.htmlPlayer && this.htmlPlayer.src && this.htmlPlayer.src !== window.location.href) {
+      if (this.htmlPlayer?.src && this.htmlPlayer.src !== window.location.href) {
         await this.htmlPlayer.play();
-        await this.updateMediaSessionState('playing');
+        this.updateMediaSessionState('playing');
         this.updateMediaSessionPosition();
       }
-    } catch (error: any) {
-      if (error.name === 'AbortError') {
-        console.warn('AudioEngine playback interrupted (AbortError). This is normal when switching tracks rapidly.');
-        return;
-      }
-      console.error('AudioEngine playback error:', error);
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === 'AbortError') return;
+      console.error('[AudioEngine] HTMLAudio play error:', error);
     }
   }
-
 
   public async pause() {
-    this.htmlPlayer?.pause();
-    await this.updateMediaSessionState('paused');
-  }
+    if (YouTubeExtractionService.isAndroid()) {
+      try {
+        await ExoPlayerNative.pause();
+      } catch (e) {
+        console.error('[AudioEngine] ExoPlayer pause error:', e);
+      }
+      return;
+    }
 
+    // Web fallback
+    this.htmlPlayer?.pause();
+    this.updateMediaSessionState('paused');
+  }
 
   public seekTo(seconds: number) {
-    if (this.htmlPlayer) {
-      this.htmlPlayer.currentTime = seconds;
+    if (YouTubeExtractionService.isAndroid()) {
+      ExoPlayerNative.seek({ seconds }).catch(e =>
+        console.error('[AudioEngine] ExoPlayer seek error:', e)
+      );
+      this.exoCurrentTime = seconds;
+      return;
     }
+    if (this.htmlPlayer) this.htmlPlayer.currentTime = seconds;
   }
-
 
   public setVolume(volume: number) {
-    this.volume = volume;
-    if (this.htmlPlayer) {
-      this.htmlPlayer.volume = this.volume;
+    if (YouTubeExtractionService.isAndroid()) {
+      ExoPlayerNative.setVolume({ volume }).catch(e =>
+        console.error('[AudioEngine] ExoPlayer setVolume error:', e)
+      );
+      return;
     }
-  }
-
-
-  public hasSource(): boolean {
-    return !!(this.htmlPlayer && this.htmlPlayer.src && this.htmlPlayer.src !== window.location.href && this.htmlPlayer.src !== '');
+    if (this.htmlPlayer) this.htmlPlayer.volume = volume;
   }
 
   public hasLocalSource(): boolean {
-    if (!this.htmlPlayer || !this.htmlPlayer.src) return false;
-    return this.htmlPlayer.src.startsWith('blob:') || this.htmlPlayer.src.includes('localhost');
+    if (YouTubeExtractionService.isAndroid()) {
+      // ExoPlayer always streams directly — local sources are loaded the same way
+      return false;
+    }
+    return !!(
+      this.htmlPlayer?.src &&
+      (this.htmlPlayer.src.startsWith('blob:') || this.htmlPlayer.src.startsWith('data:'))
+    );
+  }
+
+  public hasSource(): boolean {
+    if (YouTubeExtractionService.isAndroid()) {
+      // Assume ExoPlayer has a source if it's playing or paused (not idle)
+      return this.exoPlaying || this.exoCurrentTime > 0 || this.exoDuration > 0;
+    }
+    return !!(
+      this.htmlPlayer?.src &&
+      this.htmlPlayer.src !== window.location.href &&
+      this.htmlPlayer.src !== ''
+    );
   }
 
   /**
-   * Hot-swap: changes the audio source without calling reset().
-   * Saves the current playback position and resumes from it after load.
-   * There will be a brief (~0.5s) stutter while the new source loads.
+   * Hot-swap source mid-playback (web fallback only).
+   * On Android ExoPlayer handles buffering natively — no hot-swap needed.
    */
   public swapSource(newUrl: string, wasPlaying: boolean): void {
+    if (YouTubeExtractionService.isAndroid()) {
+      // Not needed with ExoPlayer — it buffers the remote stream natively.
+      console.log('[AudioEngine] swapSource called on Android (no-op, ExoPlayer is self-sufficient)');
+      return;
+    }
+
     if (!this.htmlPlayer) return;
     const savedTime = this.htmlPlayer.currentTime;
-    console.log(`[AudioEngine] Swapping source at ${savedTime.toFixed(2)}s to: ${newUrl.substring(0, 40)}...`);
     this.htmlPlayer.src = newUrl;
     this.htmlPlayer.load();
-    const onCanPlay = () => {
+
+    const onLoaded = () => {
       if (this.htmlPlayer) {
         this.htmlPlayer.currentTime = savedTime;
-        if (wasPlaying) this.htmlPlayer.play();
-        this.htmlPlayer.removeEventListener('canplay', onCanPlay);
+        if (wasPlaying) this.htmlPlayer.play().catch(e => console.error('[AudioEngine] swap play error:', e));
+        this.htmlPlayer.removeEventListener('loadedmetadata', onLoaded);
       }
     };
-    this.htmlPlayer.addEventListener('canplay', onCanPlay);
+    this.htmlPlayer.addEventListener('loadedmetadata', onLoaded);
   }
 
-
   public async reset() {
+    if (YouTubeExtractionService.isAndroid()) {
+      try {
+        await ExoPlayerNative.stop();
+      } catch (e) { /* ignore */ }
+      this.exoCurrentTime = 0;
+      this.exoDuration = 0;
+      this.exoPlaying = false;
+      return;
+    }
+
+    // Web fallback
     if (this.htmlPlayer) {
       this.htmlPlayer.pause();
       this.htmlPlayer.removeAttribute('src');
@@ -157,27 +258,50 @@ class AudioEngine {
       this.htmlPlayer.currentTime = 0;
     }
 
-
-    const isMobile = typeof window !== 'undefined' && (window as any).Capacitor;
-    if (isMobile) {
-      try {
-        await this.updateMediaSessionState('none');
-      } catch (_e) { }
+    if (YouTubeExtractionService.isCapacitor()) {
+      try { await this.updateMediaSessionState('none'); } catch (_e) { }
     }
-
-
     if ('mediaSession' in navigator) {
       navigator.mediaSession.metadata = null;
       navigator.mediaSession.playbackState = 'none';
     }
   }
 
-
-  public async loadSong(song: any, startSeconds: number = 0, autoplay: boolean = true, localUrl?: string) {
+  /**
+   * Load a song for playback.
+   *
+   * Android path:
+   *   1. Extract stream URL via yt-dlp (YouTubeNativePlugin.getStreamUrl)
+   *   2. Pass URL to ExoPlayerNative.load() — ExoPlayer plays it natively
+   *
+   * Web path:
+   *   Same as before — HTMLAudioElement.
+   */
+  public async loadSong(
+    song: { id?: string; title: string; artistName: string; albumName?: string; thumbnailUrl?: string; streamUrl?: string },
+    startSeconds = 0,
+    autoplay = true,
+    localUrl?: string
+  ) {
     await this.reset();
+    this.currentSongTitle = song.title;
 
+    if (YouTubeExtractionService.isAndroid()) {
+      await this.loadSongExoPlayer(song, startSeconds, autoplay, localUrl);
+      return;
+    }
 
-    const src = localUrl || (song as any).streamUrl;
+    // ── Web / PWA ──────────────────────────────────────────────────────────
+    let src = localUrl || song.streamUrl;
+
+    if (!src && song.id) {
+      try {
+        src = await youtubeExtractionService.getStreamUrl(song.id);
+      } catch (e) {
+        console.error('[AudioEngine] Web stream extraction failed:', e);
+      }
+    }
+
     if (src && this.htmlPlayer) {
       this.htmlPlayer.src = src;
       this.htmlPlayer.load();
@@ -190,143 +314,190 @@ class AudioEngine {
           this.htmlPlayer.removeEventListener('canplay', onCanPlay);
         }
       };
-
-
       this.htmlPlayer.addEventListener('canplay', onCanPlay);
-
-
-      // Update MediaSession (Native + Web)
-      const isMobile = typeof window !== 'undefined' && (window as any).Capacitor;
-
-      const metadata = {
-        title: song.title,
-        artist: song.artistName,
-        album: song.albumName || 'ChrisMusic',
-        artwork: [
-          { src: song.thumbnailUrl || '/icon-192x192.png', sizes: '192x192', type: 'image/jpeg' },
-          { src: song.thumbnailUrl || '/icon-512x512.png', sizes: '512x512', type: 'image/jpeg' },
-        ]
-      };
-
-
-      if (isMobile) {
-        try {
-          const { MediaSession: CapMediaSession } = await import('@jofr/capacitor-media-session');
-          await CapMediaSession.setMetadata(metadata);
-          await this.updateMediaSessionState(autoplay ? 'playing' : 'paused');
-        } catch (_e) {
-          console.error('Capacitor MediaSession error:', _e);
-        }
-      }
-
-
-      if ('mediaSession' in navigator) {
-        navigator.mediaSession.metadata = new MediaMetadata(metadata);
-        await this.updateMediaSessionState(autoplay ? 'playing' : 'paused');
-      }
+      this.setWebMediaSession(song, autoplay);
     }
   }
 
+  // ─── ExoPlayer-specific song loading ──────────────────────────────────────
 
-  public async setMediaSessionActions(actions: { onPlay?: () => void, onPause?: () => void, onNext?: () => void, onPrevious?: () => void }) {
-    const isMobile = typeof window !== 'undefined' && (window as any).Capacitor;
+  private async loadSongExoPlayer(
+    song: { id?: string; title: string; artistName: string; thumbnailUrl?: string; streamUrl?: string },
+    startSeconds: number,
+    autoplay: boolean,
+    localUrl?: string
+  ) {
+    let url = localUrl || song.streamUrl;
 
+    // If we have a local/offline file — load it directly
+    if (url) {
+      await this.callExoLoad(url, song.title, song.artistName, song.thumbnailUrl);
+      if (startSeconds > 0) this.seekTo(startSeconds);
+      if (!autoplay) await ExoPlayerNative.pause();
+      return;
+    }
 
-    if (isMobile) {
+    // Otherwise extract via yt-dlp
+    if (!song.id) {
+      console.error('[AudioEngine] Cannot load song on Android: no ID and no URL');
+      return;
+    }
+
+    try {
+      console.log(`[AudioEngine] Extracting stream URL for ${song.id} via yt-dlp...`);
+      const streamUrl = await youtubeExtractionService.getStreamUrl(song.id);
+      if (!streamUrl) throw new Error('Empty URL from yt-dlp');
+
+      console.log('[AudioEngine] Got stream URL, handing off to ExoPlayer');
+      await this.callExoLoad(streamUrl, song.title, song.artistName, song.thumbnailUrl);
+      if (startSeconds > 0) this.seekTo(startSeconds);
+      if (!autoplay) await ExoPlayerNative.pause();
+    } catch (e) {
+      console.error('[AudioEngine] ExoPlayer load failed:', e);
+      this.emit(STATE.PAUSED);
+    }
+  }
+
+  private async callExoLoad(url: string, title: string, artist: string, artwork?: string) {
+    await ExoPlayerNative.load({ url, title, artist, artwork: artwork ?? '' });
+  }
+
+  // ─── MediaSession (Web only) ───────────────────────────────────────────────
+
+  private async setWebMediaSession(
+    song: { title: string; artistName: string; albumName?: string; thumbnailUrl?: string },
+    autoplay: boolean
+  ) {
+    if (!('mediaSession' in navigator)) return;
+    const metadata = {
+      title: song.title,
+      artist: song.artistName,
+      album: song.albumName || 'ChrisMusic',
+      artwork: [
+        { src: song.thumbnailUrl || '/icon-192x192.png', sizes: '192x192', type: 'image/jpeg' },
+        { src: song.thumbnailUrl || '/icon-512x512.png', sizes: '512x512', type: 'image/jpeg' },
+      ],
+    };
+
+    if (YouTubeExtractionService.isCapacitor()) {
+      try {
+        const { MediaSession: CapMediaSession } = await import('@jofr/capacitor-media-session');
+        await CapMediaSession.setMetadata(metadata);
+        await this.updateMediaSessionState(autoplay ? 'playing' : 'paused');
+      } catch (_e) { }
+    }
+
+    navigator.mediaSession.metadata = new MediaMetadata(metadata);
+    this.updateMediaSessionState(autoplay ? 'playing' : 'paused');
+  }
+
+  private async updateMediaSessionState(state: 'playing' | 'paused' | 'none') {
+    if (YouTubeExtractionService.isCapacitor()) {
+      try {
+        const { MediaSession: CapMediaSession } = await import('@jofr/capacitor-media-session');
+        await CapMediaSession.setPlaybackState({ playbackState: state });
+      } catch (_e) { }
+    }
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = state;
+    }
+  }
+
+  public async setMediaSessionActions(actions: {
+    onPlay?: () => void;
+    onPause?: () => void;
+    onNext?: () => void;
+    onPrevious?: () => void;
+  }) {
+    // ExoPlayer on Android: media session is managed natively by MusicPlayerService.
+    // JS MediaSession hooks are still wired for web fallback.
+    if (YouTubeExtractionService.isCapacitor()) {
       try {
         const { MediaSession: CapMediaSession } = await import('@jofr/capacitor-media-session');
         await CapMediaSession.setActionHandler({ action: 'play' }, async () => {
           await this.play();
-          if (actions.onPlay) actions.onPlay();
+          actions.onPlay?.();
         });
         await CapMediaSession.setActionHandler({ action: 'pause' }, async () => {
           await this.pause();
-          if (actions.onPause) actions.onPause();
+          actions.onPause?.();
         });
-        await CapMediaSession.setActionHandler({ action: 'nexttrack' }, actions.onNext || null);
-        await CapMediaSession.setActionHandler({ action: 'previoustrack' }, actions.onPrevious || null);
+        await CapMediaSession.setActionHandler({ action: 'nexttrack' }, actions.onNext ?? null);
+        await CapMediaSession.setActionHandler({ action: 'previoustrack' }, actions.onPrevious ?? null);
         await CapMediaSession.setActionHandler({ action: 'seekto' }, (details) => {
           if (typeof details.seekTime === 'number') this.seekTo(details.seekTime);
         });
-      } catch (e) {
-        console.error('Capacitor MediaSession Actions error:', e);
-      }
+      } catch (_e) { }
     }
-
 
     if ('mediaSession' in navigator) {
       if (actions.onPlay) {
         navigator.mediaSession.setActionHandler('play', async () => {
           await this.play();
-          if (actions.onPlay) actions.onPlay();
+          actions.onPlay?.();
         });
       }
       if (actions.onPause) {
         navigator.mediaSession.setActionHandler('pause', () => {
           this.pause();
-          if (actions.onPause) actions.onPause();
+          actions.onPause?.();
         });
       }
       if (actions.onNext) navigator.mediaSession.setActionHandler('nexttrack', actions.onNext);
       if (actions.onPrevious) navigator.mediaSession.setActionHandler('previoustrack', actions.onPrevious);
-
       navigator.mediaSession.setActionHandler('seekto', (details) => {
-        if (details.seekTime !== undefined) {
-          this.seekTo(details.seekTime);
-        }
+        if (details.seekTime !== undefined) this.seekTo(details.seekTime);
       });
     }
   }
 
+  // ─── State queries ─────────────────────────────────────────────────────────
 
   public getDuration(): number {
+    if (YouTubeExtractionService.isAndroid()) return this.exoDuration;
     return this.htmlPlayer?.duration || 0;
   }
 
-
   public getCurrentTime(): number {
+    if (YouTubeExtractionService.isAndroid()) return this.exoCurrentTime;
     return this.htmlPlayer?.currentTime || 0;
   }
 
-
   public getPlayerState(): number {
-    if (this.htmlPlayer?.paused) return 2; // Paused
-    if (this.htmlPlayer?.ended) return 0; // Ended
-    return 1; // Playing
+    if (YouTubeExtractionService.isAndroid()) {
+      return this.exoPlaying ? STATE.PLAYING : STATE.PAUSED;
+    }
+    if (this.htmlPlayer?.paused) return STATE.PAUSED;
+    if (this.htmlPlayer?.ended) return STATE.ENDED;
+    return STATE.PLAYING;
   }
 
-
   public async isPlayingNative(): Promise<boolean> {
+    if (YouTubeExtractionService.isAndroid()) return this.exoPlaying;
     return !this.htmlPlayer?.paused;
   }
 
-
   public async updateMediaSessionPosition() {
-    if (this.htmlPlayer) {
-      const positionState = {
-        duration: isFinite(this.htmlPlayer.duration) ? this.htmlPlayer.duration : 0,
-        playbackRate: this.htmlPlayer.playbackRate,
-        position: isFinite(this.htmlPlayer.currentTime) ? this.htmlPlayer.currentTime : 0,
-      };
+    if (YouTubeExtractionService.isAndroid()) return; // ExoPlayer handles this natively
+    if (!this.htmlPlayer) return;
 
+    const positionState = {
+      duration: isFinite(this.htmlPlayer.duration) ? this.htmlPlayer.duration : 0,
+      playbackRate: this.htmlPlayer.playbackRate,
+      position: isFinite(this.htmlPlayer.currentTime) ? this.htmlPlayer.currentTime : 0,
+    };
 
-      const isMobile = typeof window !== 'undefined' && (window as any).Capacitor;
-      if (isMobile) {
-        try {
-          const { MediaSession: CapMediaSession } = await import('@jofr/capacitor-media-session');
-          CapMediaSession.setPositionState(positionState).catch(() => { });
-        } catch (e) { }
-      }
+    if (YouTubeExtractionService.isCapacitor()) {
+      try {
+        const { MediaSession: CapMediaSession } = await import('@jofr/capacitor-media-session');
+        CapMediaSession.setPositionState(positionState).catch(() => {});
+      } catch (_e) { }
+    }
 
-
-      if ('mediaSession' in navigator) {
-        try {
-          navigator.mediaSession.setPositionState(positionState);
-        } catch (e) { }
-      }
+    if ('mediaSession' in navigator) {
+      try { navigator.mediaSession.setPositionState(positionState); } catch (_e) { }
     }
   }
 }
-
 
 export const audioEngine = AudioEngine.getInstance();

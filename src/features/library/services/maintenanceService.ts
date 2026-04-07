@@ -50,5 +50,46 @@ export const MaintenanceService = {
       console.error('Failed to sync cookies with API:', error);
       throw error;
     }
+  },
+
+  /**
+   * Clears the entire application cache (DB and Filesystem).
+   */
+  async clearAppCache(): Promise<void> {
+    try {
+      const { db } = await import('@/core/db/db');
+      
+      // 1. Clear IndexedDB Cache
+      console.log('[MaintenanceService] Clearing IndexedDB cachedSongs...');
+      await db.cachedSongs.clear();
+      
+      // 2. Clear Filesystem Cache (Capacitor)
+      if (typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform()) {
+        const { Filesystem, Directory } = await import('@capacitor/filesystem');
+        console.log('[MaintenanceService] Clearing Filesystem Cache...');
+        
+        try {
+          const files = await Filesystem.readdir({
+            path: '',
+            directory: Directory.Cache
+          });
+          
+          for (const file of files.files) {
+            await Filesystem.deleteFile({
+              path: file.name,
+              directory: Directory.Cache
+            });
+          }
+        } catch (fsError) {
+          console.warn('[MaintenanceService] Filesystem cache was already empty or inaccessible:', fsError);
+        }
+      }
+      
+      toast.success('Caché del sistema liberado correctamente');
+    } catch (error) {
+      console.error('Failed to clear app cache:', error);
+      toast.error('Error al liberar caché');
+      throw error;
+    }
   }
 };

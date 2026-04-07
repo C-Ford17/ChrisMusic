@@ -1,41 +1,52 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { audioEngine } from '../audioEngine';
 
+/**
+ * AudioEngine unit tests — ExoPlayer strategy branch.
+ *
+ * NOTE: Full playback tests require a real Android device / emulator.
+ * These tests cover the singleton contract and web fallback state queries.
+ */
+
 describe('AudioEngine', () => {
-  beforeEach(() => {
-    audioEngine.destroy();
-  });
-
   it('should be a singleton', () => {
-    const instance1 = audioEngine;
-    const instance2 = audioEngine;
-    expect(instance1).toBe(instance2);
+    // The module export is always the same instance
+    expect(audioEngine).toBe(audioEngine);
+    expect(audioEngine).toBeDefined();
   });
 
-  it('should update readiness when a player is attached', () => {
-    expect(audioEngine.isReady).toBe(false);
-    
-    // Mocking YT.Player
-    const mockPlayer = {
-      setVolume: vi.fn(),
-      playVideo: vi.fn(),
-      pauseVideo: vi.fn(),
-      destroy: vi.fn(),
-    } as any;
-
-    audioEngine.setPlayer(mockPlayer);
-    expect(audioEngine.isReady).toBe(true);
+  it('should expose playback API', () => {
+    expect(typeof audioEngine.play).toBe('function');
+    expect(typeof audioEngine.pause).toBe('function');
+    expect(typeof audioEngine.seekTo).toBe('function');
+    expect(typeof audioEngine.setVolume).toBe('function');
+    expect(typeof audioEngine.loadSong).toBe('function');
+    expect(typeof audioEngine.reset).toBe('function');
   });
 
-  it('should call setVolume on the player', () => {
-    const mockSetVolume = vi.fn();
-    const mockPlayer = {
-      setVolume: mockSetVolume,
-    } as any;
+  it('should expose state queries', () => {
+    expect(typeof audioEngine.getDuration).toBe('function');
+    expect(typeof audioEngine.getCurrentTime).toBe('function');
+    expect(typeof audioEngine.getPlayerState).toBe('function');
+    expect(typeof audioEngine.isPlayingNative).toBe('function');
+    expect(typeof audioEngine.hasSource).toBe('function');
+  });
 
-    audioEngine.setPlayer(mockPlayer);
-    audioEngine.setVolume(0.5);
+  it('getCurrentTime() returns 0 when no song loaded (web)', () => {
+    // In a jsdom environment (no Android), htmlPlayer is fresh
+    expect(audioEngine.getCurrentTime()).toBe(0);
+  });
 
-    expect(mockSetVolume).toHaveBeenCalledWith(50);
+  it('getDuration() returns 0 when no song loaded (web)', () => {
+    expect(audioEngine.getDuration()).toBe(0);
+  });
+
+  it('hasSource() returns false when no song loaded (web)', () => {
+    expect(audioEngine.hasSource()).toBe(false);
+  });
+
+  it('getPlayerState() returns 2 (paused) when idle', () => {
+    // State.PAUSED = 2
+    expect(audioEngine.getPlayerState()).toBe(2);
   });
 });
