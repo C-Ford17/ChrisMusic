@@ -6,6 +6,7 @@ import { lyricsService, type LyricsLine, type LyricsData } from '@/features/lyri
 import { offlineService } from '@/features/library/services/offlineService';
 import { audioEngine } from '@/features/player/services/audioEngine';
 import { youtubeExtractionService } from '@/features/player/services/youtubeExtractionService';
+import { db } from '@/core/db/db';
 import { toast } from 'sonner';
 
 interface PlayerState {
@@ -26,6 +27,7 @@ interface PlayerState {
   showLyrics: boolean;
   isCaching: string | null; // ID of the song being cached
   isBuffering: boolean;
+  prefetchingId: string | null;
 
   // Offline State
   downloadingSongs: Set<string>;
@@ -56,6 +58,7 @@ interface PlayerState {
   updateLyrics: (data: LyricsData) => Promise<void>;
   setShowLyrics: (show: boolean) => void;
   setIsBuffering: (isBuffering: boolean) => void;
+  prefetchNext: () => Promise<void>;
   clearPlayerState: () => void;
 }
 
@@ -77,6 +80,7 @@ export const usePlayerStore = create<PlayerState>()(
       showLyrics: false,
       isCaching: null,
       isBuffering: false,
+      prefetchingId: null,
       downloadingSongs: new Set(),
 
       toggleDownload: async (song: Song) => {
@@ -118,28 +122,81 @@ export const usePlayerStore = create<PlayerState>()(
       }),
 
       playSong: async (song: Song, startSeconds: number = 0) => {
+        // Prevent double loading the same song if already buffering
+        if (get().currentSong?.id === song.id && get().isBuffering) {
+          console.log('[PlayerStore] Already buffering:', song.title);
+          return;
+        }
+
+        // Build "Smart Queue" from history (excluding downloaded songs)
+        let dynamicQueue: Song[] = [song];
+        try {
+          const recentPlays = await db.history
+            .orderBy('playedAt')
+            .reverse()
+            .limit(20) // Take more to account for filtering
+            .toArray();
+            
+          const downloaded = await db.offlineSongs.toArray();
+          const offlineIds = new Set(downloaded.map((os: any) => os.id));
+          
+          const historySongs: Song[] = [];
+          const seenIds = new Set([song.id]);
+
+          for (const entry of recentPlays) {
+            const s = entry.song as Song;
+            if (!seenIds.has(s.id) && !offlineIds.has(s.id)) {
+              historySongs.push(s);
+              seenIds.add(s.id);
+              if (historySongs.length >= 10) break;
+            }
+          }
+          
+          dynamicQueue = [song, ...historySongs];
+          console.log(`[PlayerStore] Smart Queue: Added ${historySongs.length} recent songs.`);
+        } catch (e) {
+          console.warn('[PlayerStore] Could not build smart queue from history:', e);
+        }
+
         set({ 
           currentSong: song, 
           isPlaying: true, 
           isBuffering: true,
-          queue: [song], 
+          queue: dynamicQueue, 
           lyrics: null, 
           progress: startSeconds 
         });
         LibraryService.recordPlay(song);
         get().fetchLyrics(song);
 
-        // Check for already-downloaded offline file first
-        const finalUrl = await offlineService.getOfflineUrl(song.id);
-        if (finalUrl) {
-          audioEngine.loadSong(song, startSeconds, true, finalUrl);
+        // 1. Check for already-downloaded offline file first (Permanent)
+        const offlineUrl = await offlineService.getOfflineUrl(song.id);
+        if (offlineUrl) {
+          console.log('[PlayerStore] Source: Offline (Permanent)');
+          await audioEngine.loadSong(song, startSeconds, true, offlineUrl);
+          get().prefetchNext();
+          return;
+        }
+
+        // 2. Check for cached file (Temporary/Rolling)
+        const cachedUrl = await offlineService.getCachedUrl(song.id);
+        if (cachedUrl) {
+          console.log('[PlayerStore] Source: Cache (Temporary)');
+          await audioEngine.loadSong(song, startSeconds, true, cachedUrl);
+          offlineService.cacheSong(song); // Update timestamp
+          get().prefetchNext();
           return;
         }
 
         try {
-          // On Android: ExoPlayer extracts+plays natively — no ADTS caching needed.
-          // On Web/PWA: HTMLAudioElement plays the stream URL directly.
+          // 3. Extraction + Streaming
           await audioEngine.loadSong(song, startSeconds, get().isPlaying);
+          
+          // Background: Cache this song for future plays
+          offlineService.cacheSong(song);
+          
+          // Background: Prefetch next song
+          get().prefetchNext();
         } catch (e) {
           console.error('[PlayerStore] playSong failed:', e);
           set({ isBuffering: false, isPlaying: false });
@@ -148,6 +205,12 @@ export const usePlayerStore = create<PlayerState>()(
       },
 
       playSongInQueue: async (song: Song, queue: Song[], startSeconds: number = 0) => {
+        // Prevent double loading
+        if (get().currentSong?.id === song.id && get().isBuffering) {
+          console.log('[PlayerStore] Already buffering in queue:', song.title);
+          return;
+        }
+
         set({ 
           currentSong: song, 
           isPlaying: true, 
@@ -159,17 +222,34 @@ export const usePlayerStore = create<PlayerState>()(
         LibraryService.recordPlay(song);
         get().fetchLyrics(song);
 
-        // Offline/downloaded takes priority
+        // 1. Offline (Permanent)
         const offlineUrl = await offlineService.getOfflineUrl(song.id);
         if (offlineUrl) {
-          audioEngine.loadSong(song, startSeconds, true, offlineUrl);
+          console.log('[PlayerStore] Source: Offline (Permanent)');
+          await audioEngine.loadSong(song, startSeconds, true, offlineUrl);
+          get().prefetchNext();
+          return;
+        }
+
+        // 2. Cache (Temporary/Rolling)
+        const cachedUrl = await offlineService.getCachedUrl(song.id);
+        if (cachedUrl) {
+          console.log('[PlayerStore] Source: Cache (Temporary)');
+          await audioEngine.loadSong(song, startSeconds, true, cachedUrl);
+          offlineService.cacheSong(song); // Update timestamp
+          get().prefetchNext();
           return;
         }
 
         try {
-          // On Android: ExoPlayer extracts+plays natively — no ADTS caching needed.
-          // On Web/PWA: HTMLAudioElement plays the stream URL directly.
+          // 3. Extraction + Streaming
           await audioEngine.loadSong(song, startSeconds, get().isPlaying);
+          
+          // Background: Cache this song
+          offlineService.cacheSong(song);
+          
+          // Background: Prefetch next
+          get().prefetchNext();
         } catch (e) {
           console.error('[PlayerStore] playSongInQueue failed:', e);
           set({ isBuffering: false, isPlaying: false });
@@ -359,6 +439,36 @@ export const usePlayerStore = create<PlayerState>()(
 
       setShowLyrics: (show: boolean) => set({ showLyrics: show }),
       setIsBuffering: (isBuffering: boolean) => set({ isBuffering }),
+      
+      prefetchNext: async () => {
+        const { queue, currentSong, prefetchingId } = get();
+        if (!currentSong || queue.length === 0) return;
+
+        const currentIndex = queue.findIndex(s => s.id === currentSong.id);
+        if (currentIndex === -1 || currentIndex === queue.length - 1) return;
+
+        const nextSong = queue[currentIndex + 1];
+        if (prefetchingId === nextSong.id) return; // Already prefetching
+
+        // Check if already offline or cached
+        const isOffline = await offlineService.isDownloaded(nextSong.id);
+        const cachedUrl = await offlineService.getCachedUrl(nextSong.id);
+        if (isOffline || cachedUrl) return;
+
+        console.log('[PlayerStore] Prefetching next song URL:', nextSong.title);
+        set({ prefetchingId: nextSong.id });
+        
+        try {
+          // Note: we just extract the URL so it's ready in yt-dlp internal cache or similar
+          // For a more aggressive approach, we could call offlineService.cacheSong(nextSong)
+          await youtubeExtractionService.getStreamUrl(nextSong.id);
+        } catch (e) {
+          console.warn('[PlayerStore] Prefetch failed:', e);
+        } finally {
+          set({ prefetchingId: null });
+        }
+      },
+
       clearPlayerState: () => {
         audioEngine.pause();
         set({

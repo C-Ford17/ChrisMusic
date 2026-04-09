@@ -50,7 +50,29 @@ export class OfflineService {
                 : 'aac'; // default for audio/aac or audio/mp4
       const fullName = `${fileName}.${ext}`;
 
-      // Convert Blob → base64
+      // OPTIMIZATION: Check if the file already exists in cache
+      try {
+        const { uri } = await Filesystem.getUri({
+          path: fullName,
+          directory: Directory.Cache,
+        });
+        
+        // Use stat to verify the file actually exists and has content
+        const stats = await Filesystem.stat({
+          path: fullName,
+          directory: Directory.Cache
+        });
+
+        if (stats.size > 0) {
+          console.log('[OfflineService] Using existing file from disk cache:', fullName);
+          return uri;
+        }
+      } catch (statError) {
+        // File doesn't exist or error getting stat, proceed to write it
+        console.log('[OfflineService] File not in disk cache, writing new:', fullName);
+      }
+
+      // Convert Blob → base64 (Expensive operation blocker)
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => {
@@ -75,7 +97,7 @@ export class OfflineService {
         directory: Directory.Cache,
       });
 
-      console.log('[OfflineService] Written offline file to:', uri);
+      console.log('[OfflineService] Successfully written new file to disk:', uri);
       return uri;
     } catch (e) {
       console.error('[OfflineService] blobToNativeFileUri failed:', e);
@@ -181,11 +203,22 @@ export class OfflineService {
     await db.offlineSongs.delete(songId);
   }
 
-  // Cache compatibility methods (Aggressive caching)
+  // Cache compatibility methods (Rolling cache for last 10 songs)
+  private readonly CACHE_LIMIT = 10;
+
   async cacheSong(song: Song): Promise<void> {
     try {
-      const isCached = await db.cachedSongs.get(song.id);
-      if (isCached) return;
+      // 1. Skip if it's already downloaded permanently
+      if (await this.isDownloaded(song.id)) {
+        return;
+      }
+
+      // 2. Check if already in cache to update timestamp
+      const existing = await db.cachedSongs.get(song.id);
+      if (existing) {
+        await db.cachedSongs.update(song.id, { cachedAt: Date.now() });
+        return;
+      }
 
       console.log(`[OfflineService] Caching song: ${song.title}`);
       let blob: Blob;
@@ -203,9 +236,36 @@ export class OfflineService {
         audioBlob: blob,
         cachedAt: Date.now()
       };
+      
       await db.cachedSongs.put(cachedSong);
+      
+      // 3. Clean up oldest entries
+      await this.cleanupCache();
     } catch (e) {
       console.warn('[OfflineService] Caching failed:', e);
+    }
+  }
+
+  /**
+   * Maintains the cache limit by deleting oldest entries.
+   */
+  private async cleanupCache(): Promise<void> {
+    try {
+      const count = await db.cachedSongs.count();
+      if (count <= this.CACHE_LIMIT) return;
+
+      const excess = count - this.CACHE_LIMIT;
+      const oldestEntries = await db.cachedSongs
+        .orderBy('cachedAt')
+        .limit(excess)
+        .toArray();
+
+      for (const entry of oldestEntries) {
+        console.log(`[OfflineService] Cleaning up old cache entry: ${entry.song.title}`);
+        await db.cachedSongs.delete(entry.id);
+      }
+    } catch (e) {
+      console.error('[OfflineService] cleanupCache failed:', e);
     }
   }
 

@@ -43,10 +43,11 @@ public class MusicPlayerService extends MediaSessionService {
             NotificationChannel channel = new NotificationChannel(
                     CHANNEL_ID,
                     "ChrisMusic Playback",
-                    NotificationManager.IMPORTANCE_HIGH
+                    NotificationManager.IMPORTANCE_LOW
             );
             channel.setDescription("Control de reproducción de música");
             channel.setShowBadge(false);
+            channel.setSound(null, null); // Ensure no sound on updates
             NotificationManager manager = getSystemService(NotificationManager.class);
             if (manager != null) manager.createNotificationChannel(channel);
         }
@@ -60,6 +61,7 @@ public class MusicPlayerService extends MediaSessionService {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        return super.onStartCommand(intent, flags, startId);
+        super.onStartCommand(intent, flags, startId);
+        return START_STICKY;
     }
 }

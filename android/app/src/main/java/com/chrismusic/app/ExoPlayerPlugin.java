@@ -107,7 +107,7 @@ public class ExoPlayerPlugin extends Plugin {
                 notifyStateChange("loading");
 
 
-                startMusicService(title, artist);
+                startMusicService();
                 startProgressPolling();
 
                 call.resolve();
@@ -212,7 +212,19 @@ public class ExoPlayerPlugin extends Plugin {
 
         Context context = getContext();
 
-        exoPlayer = new ExoPlayer.Builder(context).build();
+        // Build AudioAttributes for Media
+        androidx.media3.common.AudioAttributes audioAttributes = new androidx.media3.common.AudioAttributes.Builder()
+                .setUsage(androidx.media3.common.C.USAGE_MEDIA)
+                .setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MUSIC)
+                .build();
+
+        exoPlayer = new ExoPlayer.Builder(context)
+                .setAudioAttributes(audioAttributes, true) // true = handle audio focus automatically
+                .build();
+
+        // Wake mode keeps CPU and Wi-Fi alive during playback.
+        // Requires WAKE_LOCK permission in AndroidManifest.
+        exoPlayer.setWakeMode(androidx.media3.common.C.WAKE_MODE_NETWORK);
 
         // Wrap ExoPlayer in a ForwardingPlayer
         // Since we manage the queue in JS, ExoPlayer only has 1 item.
@@ -350,22 +362,14 @@ public class ExoPlayerPlugin extends Plugin {
 
     // ─── ForegroundService ───────────────────────────────────────────────────
 
-    private void startMusicService(String title, String artist) {
+    private void startMusicService() {
+        if (serviceStarted) return; // Don't restart if already running
         try {
             Context context = getContext();
             Intent intent = new Intent(context, MusicPlayerService.class);
-            intent.putExtra("title", title);
-            intent.putExtra("artist", artist);
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                // Media3 MediaSessionService automatically handles foregrounding when playback starts.
-                // Using startForegroundService here forces us to show a notification immediately,
-                // which crashes in Android 14 if Media3 hasn't prepared the media yet.
-                // Therefore, we use startService.
-                context.startService(intent);
-            } else {
-                context.startService(intent);
-            }
+            context.startService(intent);
             serviceStarted = true;
+            Log.d(TAG, "MusicPlayerService started manually");
         } catch (Exception e) {
             Log.w(TAG, "Failed to start MusicPlayerService: " + e.getMessage());
         }

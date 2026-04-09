@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { usePlayerStore } from '@/features/player/store/playerStore';
-import { Search, Plus, ListPlus, Music, Clock, Trash2, Download, Check, Loader2 } from 'lucide-react';
+import { Search, Plus, ListPlus, Music, Clock, Trash2, Download, Check, Loader2, ArrowUpLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import Image from 'next/image';
 import { type Song } from '@/core/types/music';
@@ -10,7 +10,7 @@ import { AddToPlaylistModal } from '@/shared/components/AddToPlaylistModal';
 import { LibraryService } from '@/features/library/services/libraryService';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/core/db/db';
-import { youtubeExtractionService, YouTubeExtractionService } from '@/features/player/services/youtubeExtractionService';
+import { youtubeExtractionService } from '@/features/player/services/youtubeExtractionService';
 
 const PAGE_SIZE = 15;
 
@@ -20,6 +20,13 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false);
   const [selectedSong, setSelectedSong] = useState<Song | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  
+  // Suggestion states
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
+  const [lastSearchedQuery, setLastSearchedQuery] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const { playSong, addToQueue, toggleDownload, downloadingSongs, currentSong, isBuffering } = usePlayerStore();
 
@@ -36,9 +43,46 @@ export default function SearchPage() {
     []
   ) || new Set<string>();
 
+  // Fetch suggestions with debounce
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      const trimmedQuery = query.trim();
+      // Show suggestions if:
+      // 1. Length >= 2
+      // 2. Input is focused
+      // 3. Not currently loading search results
+      // 4. Current query is different from what we JUST searched
+      if (trimmedQuery.length >= 2 && isFocused && !loading && trimmedQuery !== lastSearchedQuery) {
+        const results = await youtubeExtractionService.getSuggestions(query);
+        setSuggestions(results);
+        if (results.length > 0) {
+          setShowSuggestions(true);
+        }
+      } else {
+        setShowSuggestions(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [query, loading, isFocused, lastSearchedQuery]);
+
+  // Click outside to close suggestions
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const performSearch = async (searchTerm: string) => {
     if (!searchTerm.trim()) return;
     setLoading(true);
+    setShowSuggestions(false);
+    setLastSearchedQuery(searchTerm.trim());
 
     try {
       console.log(`[SearchPage] Searching for: ${searchTerm}`);
@@ -64,6 +108,11 @@ export default function SearchPage() {
     performSearch(query);
   };
 
+  const handleSuggestionClick = (suggestion: string) => {
+    setQuery(suggestion);
+    performSearch(suggestion);
+  };
+
   const clearHistory = async () => {
     await LibraryService.clearSearchHistory();
     toast.success('Historial borrado');
@@ -86,24 +135,59 @@ export default function SearchPage() {
             )}
           </div>
 
-          <form
-            onSubmit={onSearchSubmit}
-            action="javascript:void(0)"
-            className="relative group"
-          >
-            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#7C3AED] transition-colors" size={24} />
-            <input
-              type="text"
-              enterKeyHint="search"
-              placeholder="¿Qué quieres escuchar hoy?"
-              className="w-full bg-black/5 dark:bg-white/5 text-black dark:text-white rounded-[24px] py-6 px-16 outline-none focus:ring-4 focus:ring-[#7C3AED]/20 border border-black/5 dark:border-white/10 transition-all placeholder:text-gray-500 font-bold text-lg"
-              value={query}
-              onChange={(e) => {
-                setQuery(e.target.value);
-                if (!e.target.value) setResults([]);
-              }}
-            />
-          </form>
+          <div ref={containerRef} className="relative group">
+            <form
+              onSubmit={onSearchSubmit}
+              action="javascript:void(0)"
+              className="relative"
+            >
+              <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#7C3AED] transition-colors z-10" size={24} />
+              <input
+                type="text"
+                enterKeyHint="search"
+                placeholder="¿Qué quieres escuchar hoy?"
+                className="w-full bg-black/5 dark:bg-white/5 text-black dark:text-white rounded-[24px] py-6 px-16 outline-none focus:ring-4 focus:ring-[#7C3AED]/20 border border-black/5 dark:border-white/10 transition-all placeholder:text-gray-500 font-bold text-lg relative z-0"
+                value={query}
+                onFocus={() => {
+                  setIsFocused(true);
+                  if (query.trim().length >= 2 && suggestions.length > 0 && query.trim() !== lastSearchedQuery) {
+                    setShowSuggestions(true);
+                  }
+                }}
+                onBlur={() => {
+                  // Small delay to allow clicking suggestions before they're unmounted
+                  setTimeout(() => setIsFocused(false), 200);
+                }}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  if (!e.target.value) {
+                    setResults([]);
+                    setShowSuggestions(false);
+                    setLastSearchedQuery('');
+                  }
+                }}
+              />
+            </form>
+
+            {/* Suggestions Dropdown */}
+            {showSuggestions && suggestions.length > 0 && (
+              <div className="absolute top-full left-0 right-0 mt-2 bg-white/80 dark:bg-[#121212]/90 backdrop-blur-xl border border-black/5 dark:border-white/10 rounded-[24px] shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="py-2">
+                  {suggestions.map((suggestion, index) => (
+                    <button
+                      key={index}
+                      onClick={() => handleSuggestionClick(suggestion)}
+                      className="w-full flex items-center gap-4 px-6 py-4 hover:bg-[#7C3AED]/10 text-left transition-colors group"
+                    >
+                      <Search size={18} className="text-gray-400 group-hover:text-[#7C3AED] shrink-0" />
+                      <span className="flex-1 font-bold text-black dark:text-white line-clamp-1">{suggestion}</span>
+                      <ArrowUpLeft size={18} className="text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Search History Chips */}
           {!query && searchHistory && searchHistory.length > 0 && (

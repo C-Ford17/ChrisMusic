@@ -16,6 +16,13 @@
         "fs:allow-appdata-read-recursive",
         "fs:allow-appdata-write-recursive",
         "http:default",
-        "http:allow-fetch"
+        {
+            "identifier": "http:allow-fetch",
+            "allow": [
+                {
+                    "url": "https://suggestqueries.google.com/complete/search*"
+                }
+            ]
+        }
     ]
 }

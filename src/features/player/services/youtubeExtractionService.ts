@@ -131,9 +131,16 @@ export class YouTubeExtractionService {
     } else {
       // Legacy JS/Tauri initialization
       try {
+        // For Tauri, we skip Innertube frontend init because we rely on Rust backend
+        if (YouTubeExtractionService.isTauri()) {
+          console.log('[YouTubeExtractionService] Tauri detected - using native commands for extraction');
+          this.isInitialized = true;
+          return;
+        }
+
         const { Innertube } = await import('youtubei.js');
-        this.yt = await Innertube.create();
         this.isInitialized = true;
+        this.yt = await Innertube.create();
       } catch (e) {
         console.error('[YouTubeExtractionService] JS init failed:', e);
         this.initPromise = null;
@@ -185,7 +192,26 @@ export class YouTubeExtractionService {
       }
     }
 
-    // Fallback for JS/Tauri (if implemented in youtubei.js)
+    // Tauri Native Search
+    if (YouTubeExtractionService.isTauri()) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        const result: any[] = await invoke('search_youtube_native_cmd', { query });
+        return result.map((item: any) => ({
+          id: item.id,
+          title: item.title,
+          artistName: item.artistName,
+          thumbnailUrl: item.thumbnailUrl,
+          duration: 0, // Tauri search doesn't return duration yet
+          sourceType: 'youtube'
+        }));
+      } catch (e) {
+        console.error('[YouTubeExtractionService] Tauri search failed:', e);
+        throw e;
+      }
+    }
+
+    // Fallback for JS web
     if (this.yt) {
       const results = await this.yt.search(query);
       return results.videos.map((v: any) => ({
@@ -198,6 +224,38 @@ export class YouTubeExtractionService {
       }));
     }
 
+    return [];
+  }
+
+  /**
+   * Fetches search suggestions for a given query from YouTube.
+   */
+  async getSuggestions(query: string): Promise<string[]> {
+    if (!query || query.trim().length < 2) return [];
+
+    try {
+      let response;
+      const url = `https://suggestqueries.google.com/complete/search?client=firefox&ds=yt&q=${encodeURIComponent(query)}`;
+      
+      if (YouTubeExtractionService.isTauri()) {
+        // Use Tauri HTTP plugin to bypass CORS
+        const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http');
+        response = await tauriFetch(url);
+      } else {
+        // Standard browser fetch
+        response = await fetch(url);
+      }
+      
+      if (!response.ok) return [];
+      
+      const data = await response.json();
+      if (Array.isArray(data) && data[1] && Array.isArray(data[1])) {
+        return data[1];
+      }
+    } catch (error) {
+      console.error('[YouTubeExtractionService] Error fetching suggestions:', error);
+    }
+    
     return [];
   }
 
