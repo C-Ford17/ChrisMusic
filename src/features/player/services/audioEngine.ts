@@ -11,11 +11,16 @@
  */
 import { youtubeExtractionService, YouTubeExtractionService, ExoPlayerNative, YouTubeNative } from './youtubeExtractionService';
 import type { ExoStateChangeEvent, ExoProgressEvent } from './youtubeExtractionService';
+import type { Song } from '@/core/types/music';
 import type { PluginListenerHandle } from '@capacitor/core';
+import { toast } from 'sonner';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type StateCallback = (state: number) => void;
+type TrackChangeCallback = (id: string) => void;
+type ProgressCallback = (data: { current: number; duration: number }) => void;
+type ErrorCallback = (error: string) => void;
 
 /**
  * Player state codes (same as before for store compatibility):
@@ -40,11 +45,18 @@ class AudioEngine {
   private exoCurrentTime = 0;
   private exoDuration = 0;
   private exoPlaying = false;
+  private exoLoading = false; // Guard to prevent state collisions during transition
+  private exoState: string = 'none';
   private exoListeners: PluginListenerHandle[] = [];
 
   private onStateChange: StateCallback | null = null;
+  private onTrackChange: TrackChangeCallback | null = null;
+  public onProgress: ProgressCallback | null = null; // Public so store can set it
+  private onError: ErrorCallback | null = null;
   private mediaSessionActions: any = null;
   private currentSongTitle = 'ChrisMusic';
+  private currentSongId: string | null = null;
+  public currentUrlSource: 'web' | 'cache' | 'download' | 'youtube' | 'local' | 'unknown' = 'unknown';
 
   private constructor() {
     if (typeof window === 'undefined') return;
@@ -84,12 +96,17 @@ class AudioEngine {
     const stateHandle = await ExoPlayerNative.addListener(
       'onStateChange',
       (data: ExoStateChangeEvent) => {
+        this.exoState = data.state;
         switch (data.state) {
           case 'playing':
             this.exoPlaying = true;
             this.emit(STATE.PLAYING);
             break;
           case 'paused':
+            if (this.exoLoading) {
+              console.log('[AudioEngine] Ignoring technical pause during load sequence');
+              return;
+            }
             this.exoPlaying = false;
             this.emit(STATE.PAUSED);
             break;
@@ -102,8 +119,7 @@ class AudioEngine {
             break;
           case 'error':
             this.exoPlaying = false;
-            this.emit(STATE.PAUSED);
-            console.error('[AudioEngine] ExoPlayer error:', data.error);
+            this.handleNativeError(data.error || 'Native engine error');
             break;
         }
       }
@@ -114,7 +130,7 @@ class AudioEngine {
       (data: ExoProgressEvent) => {
         this.exoCurrentTime = data.current;
         this.exoDuration = data.duration;
-        this.emit(this.getPlayerState());
+        if (this.onProgress) this.onProgress(data);
       }
     );
 
@@ -136,7 +152,75 @@ class AudioEngine {
       }
     );
 
-    this.exoListeners = [stateHandle, progressHandle, nextHandle, prevHandle];
+    const trackChangeHandle = await ExoPlayerNative.addListener(
+      'onNativeTrackChange',
+      (data: { id: string }) => {
+        console.log('[AudioEngine] Native track change detected in background:', data.id);
+        this.currentSongId = data.id;
+        if (this.onTrackChange) this.onTrackChange(data.id);
+      }
+    );
+
+    this.exoListeners = [stateHandle, progressHandle, nextHandle, prevHandle, trackChangeHandle];
+    
+    // Perform initial sync after listeners are attached
+    this.syncWithNative();
+  }
+
+  /**
+   * Syncs the internal state with the native ExoPlayer engine.
+   * Useful on app startup or re-entry to recognize existing playback.
+   */
+  public async syncWithNative() {
+    if (!YouTubeExtractionService.isAndroid()) return;
+    try {
+      const state = await ExoPlayerNative.getPlaybackState();
+      console.log('[AudioEngine] Initial native sync:', state);
+      
+      if (state.mediaId) this.currentSongId = state.mediaId;
+      if (state.url) {
+        this.currentUrlSource = this.determineSource(state.url);
+      }
+      if (state.currentPosition) this.exoCurrentTime = state.currentPosition;
+      if (state.duration) this.exoDuration = state.duration;
+      if (state.isPlaying) this.exoPlaying = state.isPlaying;
+      if (state.state) {
+        this.exoState = state.state;
+        // Map native state string to our numeric codes for store sync
+        const stateMap: Record<string, number> = { 'playing': 1, 'paused': 2, 'loading': 3, 'ended': 0 };
+        this.emit(stateMap[state.state] ?? STATE.PAUSED);
+      }
+    } catch (e) {
+      console.error('[AudioEngine] syncWithNative failed:', e);
+    }
+  }
+
+  /**
+   * Handles fatal native errors (like the I/O error on re-entry).
+   * Attempts to reload the current song at the last known position.
+   */
+  private async handleNativeError(errorMsg: string) {
+    console.warn('[AudioEngine] Recovering from native error:', errorMsg);
+    
+    // Notify JS state as loading during recovery
+    this.emit(STATE.LOADING);
+    
+    // Visual feedback for the user
+    toast.error('Recuperando audio...', { 
+      description: 'El motor de audio se ha reiniciado por un error del sistema.',
+      duration: 3000
+    });
+
+    try {
+      if (this.currentSongId) {
+        if (this.onError) this.onError(errorMsg);
+      } else {
+        this.emit(STATE.PAUSED);
+      }
+    } catch (e) {
+      console.error('[AudioEngine] Recovery failed:', e);
+      this.emit(STATE.PAUSED);
+    }
   }
 
   private emit(state: number) {
@@ -147,13 +231,30 @@ class AudioEngine {
     this.onStateChange = callback;
   }
 
+  public setOnTrackChange(callback: TrackChangeCallback) {
+    this.onTrackChange = callback;
+  }
+
+  public setOnError(callback: ErrorCallback) {
+    this.onError = callback;
+  }
+
   // ─── Core playback API ─────────────────────────────────────────────────────
 
   public async play() {
     if (YouTubeExtractionService.isAndroid()) {
+      // Idempotency check: if we think we're playing, don't spam native
+      if (this.exoPlaying) {
+        console.log('[AudioEngine] Already playing on Android, skipping redundant play call');
+        return;
+      }
       try {
         await ExoPlayerNative.play();
+        this.exoPlaying = true; 
       } catch (e) {
+        // If it's "Already playing" in our state but NOT in native, 
+        // this allows us to recover if we try again later.
+        this.exoPlaying = true;
         console.error('[AudioEngine] ExoPlayer play error:', e);
       }
       return;
@@ -177,7 +278,7 @@ class AudioEngine {
       try {
         await ExoPlayerNative.pause();
       } catch (e) {
-        console.error('[AudioEngine] ExoPlayer pause error:', e);
+        console.error('[AudioEngine] Android native pause failed:', e);
       }
       return;
     }
@@ -265,6 +366,7 @@ class AudioEngine {
       this.exoCurrentTime = 0;
       this.exoDuration = 0;
       this.exoPlaying = false;
+      this.exoLoading = false; // Ensure guard is cleared on reset
       return;
     }
 
@@ -285,6 +387,8 @@ class AudioEngine {
     }
   }
 
+  private loadingSongId: string | null = null;
+
   /**
    * Load a song for playback.
    *
@@ -301,39 +405,59 @@ class AudioEngine {
     autoplay = true,
     localUrl?: string
   ) {
-    await this.reset();
-    this.currentSongTitle = song.title;
-
-    if (YouTubeExtractionService.isAndroid()) {
-      await this.loadSongExoPlayer(song, startSeconds, autoplay, localUrl);
+    // Android/Native guard: already playing or loading the same song
+    if (this.currentSongId === song.id && (this.exoState === 'playing' || this.exoLoading)) {
+      console.log('[AudioEngine] Song already playing or loading:', song.title);
       return;
     }
 
-    // ── Web / PWA ──────────────────────────────────────────────────────────
-    let src = localUrl || song.streamUrl;
-
-    if (!src && song.id) {
-      try {
-        src = await youtubeExtractionService.getStreamUrl(song.id);
-      } catch (e) {
-        console.error('[AudioEngine] Web stream extraction failed:', e);
-      }
+    // Extraction in progress guard
+    if (song.id && this.loadingSongId === song.id) {
+      console.log('[AudioEngine] Duplicate load requested but already extracting:', song.title);
+      return;
     }
 
-    if (src && this.htmlPlayer) {
-      this.htmlPlayer.src = src;
-      this.htmlPlayer.load();
+    console.log(`[AudioEngine] Loading song: ${song.title} (${song.id}) from ${localUrl ? 'LOCAL' : 'REMOTE'}`);
+    this.loadingSongId = song.id || null;
 
-      const onCanPlay = () => {
-        if (this.htmlPlayer) {
-          this.htmlPlayer.currentTime = startSeconds;
-          if (autoplay) this.play();
-          this.updateMediaSessionPosition();
-          this.htmlPlayer.removeEventListener('canplay', onCanPlay);
+    try {
+      this.currentSongId = song.id || null;
+      await this.reset();
+      this.currentSongTitle = song.title;
+
+      if (YouTubeExtractionService.isAndroid()) {
+        await this.loadSongExoPlayer(song, startSeconds, autoplay, localUrl);
+        return;
+      }
+
+      // ── Web / PWA ──────────────────────────────────────────────────────────
+      let src = localUrl || song.streamUrl;
+
+      if (!src && song.id) {
+        try {
+          src = await youtubeExtractionService.getStreamUrl(song.id);
+        } catch (e) {
+          console.error('[AudioEngine] Web stream extraction failed:', e);
         }
-      };
-      this.htmlPlayer.addEventListener('canplay', onCanPlay);
-      this.setWebMediaSession(song, autoplay);
+      }
+
+      if (src && this.htmlPlayer) {
+        this.htmlPlayer.src = src;
+        this.htmlPlayer.load();
+
+        const onCanPlay = () => {
+          if (this.htmlPlayer) {
+            this.htmlPlayer.currentTime = startSeconds;
+            if (autoplay) this.play();
+            this.updateMediaSessionPosition();
+            this.htmlPlayer.removeEventListener('canplay', onCanPlay);
+          }
+        };
+        this.htmlPlayer.addEventListener('canplay', onCanPlay);
+        this.setWebMediaSession(song, autoplay);
+      }
+    } finally {
+      this.loadingSongId = null;
     }
   }
 
@@ -350,11 +474,23 @@ class AudioEngine {
     // If we have a local/offline file — load it directly
     if (url) {
       console.log('[AudioEngine] Loading offline/local file into ExoPlayer');
-      await this.callExoLoad(url, song.title, song.artistName, song.thumbnailUrl);
-      if (startSeconds > 0) this.seekTo(startSeconds);
-      if (!autoplay) await ExoPlayerNative.pause();
+      this.exoLoading = true;
+      this.emit(STATE.LOADING);
+      
+      this.currentUrlSource = this.determineSource(url);
+
+      try {
+        await this.callExoLoad(url, song.title, song.artistName, song.thumbnailUrl, song.id);
+        if (startSeconds > 0) this.seekTo(startSeconds);
+        if (!autoplay) await ExoPlayerNative.pause();
+      } finally {
+        this.exoLoading = false;
+      }
       return;
     }
+
+    // Otherwise extract via yt-dlp
+    this.currentUrlSource = 'youtube';
 
     // Otherwise extract via yt-dlp (native only — Railway URLs are not compatible with ExoPlayer)
     if (!song.id) {
@@ -366,11 +502,9 @@ class AudioEngine {
     try {
       console.log(`[AudioEngine] Requesting stream URL from native yt-dlp for ${song.id}...`);
 
-      // Force UI back to loading state immediately after reset() to mask extraction delay
-      this.emit(3); // STATE.LOADING (3)
+      this.exoLoading = true;
+      this.emit(STATE.LOADING); // Immediate feedback
 
-      // Call YouTubeNative directly so we skip the Railway fallback.
-      // Railway-proxied URLs often expire or lack required headers for ExoPlayer.
       const result = await YouTubeNative.getStreamUrl({ videoId: song.id });
       const streamUrl = result?.url;
 
@@ -380,18 +514,23 @@ class AudioEngine {
 
       console.log('[AudioEngine] Got stream URL, handing off to ExoPlayer');
       await this.callExoLoad(streamUrl, song.title, song.artistName, song.thumbnailUrl);
+      
       if (startSeconds > 0) this.seekTo(startSeconds);
-      if (!autoplay) await ExoPlayerNative.pause();
+      if (!autoplay) {
+        await ExoPlayerNative.pause();
+      }
+      
+      this.exoLoading = false;
     } catch (e) {
+      this.exoLoading = false;
       console.error('[AudioEngine] ExoPlayer load failed:', e);
       this.emit(STATE.PAUSED);
-      // Throw so playerStore can show a toast
       throw e;
     }
   }
 
-  private async callExoLoad(url: string, title: string, artist: string, artwork?: string) {
-    await ExoPlayerNative.load({ url, title, artist, artwork: artwork ?? '' });
+  private async callExoLoad(url: string, title: string, artist: string, artwork?: string, id?: string) {
+    await ExoPlayerNative.load({ url, title, artist, artwork: artwork ?? '', id: id ?? '' });
   }
 
   // ─── MediaSession (Web only) ───────────────────────────────────────────────
@@ -539,6 +678,65 @@ class AudioEngine {
     if ('mediaSession' in navigator) {
       try { navigator.mediaSession.setPositionState(positionState); } catch (_e) { }
     }
+  }
+
+  /**
+   * Adds a next track to the native playlist for seamless background transition.
+   */
+  async addNextTrack(song: Song, url: string) {
+    if (!YouTubeExtractionService.isAndroid()) return;
+    
+    try {
+      console.log('[AudioEngine] Setting native next track:', song.title);
+      await ExoPlayerNative.addNextItem({
+        id: song.id,
+        url,
+        title: song.title,
+        artist: song.artistName,
+        artwork: song.thumbnailUrl
+      });
+    } catch (e) {
+      console.error('[AudioEngine] Failed to add next track natively:', e);
+    }
+  }
+
+  async setRepeatMode(mode: 'off' | 'one' | 'all') {
+    if (YouTubeExtractionService.isAndroid()) {
+      await ExoPlayerNative.setRepeatMode({ mode });
+    }
+  }
+
+  async setShuffleMode(enabled: boolean) {
+    if (YouTubeExtractionService.isAndroid()) {
+      await ExoPlayerNative.setShuffleMode({ enabled });
+    }
+  }
+
+  /**
+   * Helper to determine the source type based on the URL.
+   */
+  private determineSource(url: string): 'web' | 'cache' | 'download' | 'youtube' | 'local' | 'unknown' {
+    if (!url) return 'unknown';
+    
+    // Normalized Capacitor URLs or direct file access
+    if (url.includes('_capacitor_file_') || url.startsWith('file://') || url.startsWith('capacitor://')) {
+      if (url.includes('offline-songs')) return 'download';
+      if (url.includes('cache') || url.startsWith('blob:')) return 'cache';
+      return 'local';
+    }
+    
+    if (url.startsWith('blob:')) return 'cache';
+    if (url.includes('localhost') || url.includes('127.0.0.1')) {
+      if (url.includes('offline-songs')) return 'download';
+      return 'cache';
+    }
+
+    if (url.includes('youtube.com') || url.includes('googlevideo.com') || url.startsWith('http')) {
+       // If it's a remote URL and not our local proxy, it's youtube
+       return 'youtube';
+    }
+    
+    return 'unknown';
   }
 }
 

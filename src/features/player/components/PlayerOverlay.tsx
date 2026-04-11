@@ -18,6 +18,7 @@ import { LyricsPanel } from '@/features/lyrics/components/LyricsPanel';
 import { MarqueeText } from '@/shared/components/MarqueeText';
 import Image from 'next/image';
 import { useSettingsStore } from '@/features/settings/store/settingsStore';
+import { YouTubeExtractionService } from '@/features/player/services/youtubeExtractionService';
 
 function formatTime(seconds: number) {
   if (!seconds || isNaN(seconds)) return '0:00';
@@ -178,7 +179,13 @@ export function PlayerOverlay() {
             />
 
             <div className="relative z-10 w-12 h-12 sm:w-16 sm:h-16 mr-3 shrink-0 bg-gray-200 dark:bg-black rounded-lg sm:rounded-xl shadow-sm overflow-hidden group">
-              <Image src={currentSong.thumbnailUrl} alt={currentSong.title} fill sizes="(min-width: 640px) 64px, 48px" className="object-cover group-hover:scale-110 transition-transform" />
+              <Image 
+                src={YouTubeExtractionService.normalizeUrl(currentSong.thumbnailUrl)} 
+                alt={currentSong.title} 
+                fill 
+                sizes="(min-width: 640px) 64px, 48px" 
+                className="object-cover group-hover:scale-110 transition-transform" 
+              />
             </div>
             <div className="relative z-10 flex-1 min-w-0 mr-4 sm:max-w-xs">
               <h4 className="text-black dark:text-white font-bold text-sm sm:text-base overflow-hidden">
@@ -273,35 +280,45 @@ export function PlayerOverlay() {
                 <div className="flex-1 flex flex-col w-full max-w-[400px] md:max-w-none md:justify-center h-full min-h-0">
                   <div className={`w-full ${showLyrics || (showQueue) ? 'h-full flex-1' : 'aspect-square max-w-[500px] mx-auto'} bg-gradient-to-br from-[#7C3AED] to-black/20 dark:to-black rounded-3xl relative shadow-2xl overflow-hidden mb-4 sm:mb-8 group flex items-center justify-center border border-black/5 dark:border-white/5 transition-all duration-300`}>
                     <AnimatePresence mode="wait">
-                      {(showQueue) ? (
+                      {showQueue ? (
                         <motion.div key="queue-central" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-20">
-                           <div className="md:hidden h-full w-full bg-white dark:bg-[#0A0A0A] p-6 flex flex-col">
-                              <div className="flex justify-between items-center mb-6 shrink-0">
-                                <h3 className="font-black text-xl text-black dark:text-white flex items-center gap-3 tracking-tighter"><ListMusic className="text-[#7C3AED]" size={24} /> Siguiente</h3>
-                                <button onClick={() => setShowQueue(false)} className="p-2 bg-black/5 dark:bg-white/5 rounded-xl text-black/40 dark:text-white/50 hover:text-red-500 transition-colors"><X size={18} /></button>
-                              </div>
-                              <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar pb-safe">
-                                {queue.map((song, idx) => (
-                                  <div key={`${song.id}-${idx}`} className={`flex items-center justify-between p-3 rounded-xl transition-all ${currentSong.id === song.id ? 'bg-[#7C3AED]/10' : 'bg-black/2 dark:bg-white/2 hover:bg-black/5 dark:hover:bg-white/5'}`} onClick={() => playFromQueue(idx)}>
-                                    <div className="flex items-center min-w-0">
-                                      <div className="relative w-10 h-10 mr-3 shrink-0 bg-gray-200 dark:bg-black rounded-lg overflow-hidden shadow-sm"><Image src={song.thumbnailUrl} alt={song.title} fill sizes="40px" className="object-cover" /></div>
-                                      <div className="min-w-0">
-                                        <h4 className={`text-[11px] font-bold truncate ${currentSong.id === song.id ? 'text-[#7C3AED]' : 'text-black dark:text-white'}`}>{song.title}</h4>
-                                        <p className="text-black/40 dark:text-white/40 text-[9px] truncate font-bold">{song.artistName}</p>
-                                      </div>
+                          <div className="md:hidden h-full w-full bg-white dark:bg-[#0A0A0A] p-6 flex flex-col">
+                            <div className="flex justify-between items-center mb-6 shrink-0">
+                              <h3 className="font-black text-xl text-black dark:text-white flex items-center gap-3 tracking-tighter"><ListMusic className="text-[#7C3AED]" size={24} /> Siguiente</h3>
+                              <button onClick={() => setShowQueue(false)} className="p-2 bg-black/5 dark:bg-white/5 rounded-xl text-black/40 dark:text-white/50 hover:text-red-500 transition-colors"><X size={18} /></button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar pb-safe">
+                              {queue.map((song, idx) => (
+                                <div key={`${song.id}-${idx}`} className={`flex items-center justify-between p-3 rounded-xl transition-all ${currentSong.id === song.id ? 'bg-[#7C3AED]/10' : 'bg-black/2 dark:bg-white/2 hover:bg-black/5 dark:hover:bg-white/5'}`} onClick={() => playFromQueue(idx)}>
+                                  <div className="flex items-center min-w-0">
+                                    <div className="relative w-10 h-10 mr-3 shrink-0 bg-gray-200 dark:bg-black rounded-lg overflow-hidden shadow-sm">
+                                      <Image src={YouTubeExtractionService.normalizeUrl(song.thumbnailUrl)} alt={song.title} fill sizes="40px" className="object-cover" />
+                                    </div>
+                                    <div className="min-w-0">
+                                      <h4 className={`text-[11px] font-bold truncate ${currentSong.id === song.id ? 'text-[#7C3AED]' : 'text-black dark:text-white'}`}>{song.title}</h4>
+                                      <p className="text-black/40 dark:text-white/40 text-[9px] truncate font-bold">{song.artistName}</p>
                                     </div>
                                   </div>
-                                ))}
-                              </div>
-                           </div>
-                           <div className="hidden md:block h-full w-full relative">
-                              {showLyrics ? <LyricsPanel /> : (
-                                <>
-                                  <Image src={currentSong.thumbnailUrl} alt={currentSong.title} fill sizes="(min-width: 768px) 500px, 100vw" className="object-cover opacity-90" />
-                                  <div className="absolute inset-0 bg-linear-to-t from-black/20 to-transparent" />
-                                </>
-                              )}
-                           </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="hidden md:block h-full w-full relative">
+                            {showLyrics ? (
+                              <LyricsPanel />
+                            ) : (
+                              <>
+                                <Image 
+                                  src={YouTubeExtractionService.normalizeUrl(currentSong.thumbnailUrl)} 
+                                  alt={currentSong.title} 
+                                  fill 
+                                  sizes="(min-width: 768px) 500px, 100vw" 
+                                  className="object-cover opacity-90 transition-transform duration-700 group-hover:scale-110" 
+                                />
+                                <div className="absolute inset-0 bg-linear-to-t from-black/20 to-transparent" />
+                              </>
+                            )}
+                          </div>
                         </motion.div>
                       ) : showLyrics ? (
                         <motion.div key="lyrics" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-10 bg-white/40 dark:bg-black/40 backdrop-blur-md">
@@ -309,7 +326,7 @@ export function PlayerOverlay() {
                         </motion.div>
                       ) : (
                         <motion.div key="art" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0">
-                          <Image src={currentSong.thumbnailUrl} alt={currentSong.title} fill sizes="(min-width: 768px) 500px, 100vw" className="object-cover opacity-90 transition-transform duration-700 group-hover:scale-110" />
+                          <Image src={YouTubeExtractionService.normalizeUrl(currentSong.thumbnailUrl)} alt={currentSong.title} fill sizes="(min-width: 768px) 500px, 100vw" className="object-cover opacity-90 transition-transform duration-700 group-hover:scale-110" />
                           <div className="absolute inset-0 bg-linear-to-t from-black/20 to-transparent" />
                         </motion.div>
                       )}
@@ -393,7 +410,15 @@ export function PlayerOverlay() {
                         {queue.map((song, idx) => (
                           <div key={`${song.id}-${idx}`} className={`group flex items-center justify-between p-4 rounded-2xl transition-all cursor-pointer border ${currentSong.id === song.id ? 'bg-[#7C3AED]/10 border-[#7C3AED]/20' : 'bg-transparent border-transparent hover:bg-black/5 dark:hover:bg-white/5 hover:border-black/5 dark:hover:border-white/5'}`} onClick={() => playFromQueue(idx)}>
                             <div className="flex items-center min-w-0 pr-2">
-                               <div className="relative w-12 h-12 mr-4 shrink-0 bg-gray-200 dark:bg-black rounded-xl overflow-hidden shadow-sm"><Image src={song.thumbnailUrl} alt={song.title} fill sizes="48px" className="object-cover" /></div>
+                               <div className="relative w-12 h-12 mr-4 shrink-0 bg-gray-200 dark:bg-black rounded-xl overflow-hidden shadow-sm">
+                                 <Image 
+                                   src={YouTubeExtractionService.normalizeUrl(song.thumbnailUrl)} 
+                                   alt={song.title} 
+                                   fill 
+                                   sizes="48px" 
+                                   className="object-cover" 
+                                 />
+                               </div>
                                <div className="min-w-0">
                                  <h4 className={`text-sm font-bold overflow-hidden ${currentSong.id === song.id ? 'text-[#7C3AED]' : 'text-black dark:text-white'}`}>
                                    <MarqueeText text={song.title} />
@@ -421,8 +446,9 @@ export function PlayerOverlay() {
                             ENGINE: {typeof window !== 'undefined' && (audioEngine as any).isNativeEngine?.() ? 'ExoPlayer (Android)' : 'HTMLAudio (Web)'}<br/>
                             {typeof window !== 'undefined' && (audioEngine as any).isNativeEngine?.() ? (
                               <>
-                                EXO TIME: {(audioEngine as any).exoCurrentTime?.toFixed(1)}s / {(audioEngine as any).exoDuration?.toFixed(1)}s<br/>
-                                EXO PLAYING: {String((audioEngine as any).exoPlaying)}
+                            SOURCE: {(audioEngine as any).currentUrlSource?.toUpperCase()}<br/>
+                            EXO TIME: {(audioEngine as any).exoCurrentTime?.toFixed(1)}s / {(audioEngine as any).exoDuration?.toFixed(1)}s<br/>
+                            EXO PLAYING: {String((audioEngine as any).exoPlaying)}
                               </>
                             ) : (
                               <>

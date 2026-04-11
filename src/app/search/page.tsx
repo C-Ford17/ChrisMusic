@@ -233,7 +233,7 @@ export default function SearchPage() {
                   onClick={() => playSong(song)}
                 >
                   <div className="relative w-full aspect-square mb-4 bg-gray-200 dark:bg-gray-800 rounded-[24px] overflow-hidden shadow-md">
-                    <Image src={song.thumbnailUrl} alt={song.title} fill sizes="(max-width: 768px) 100vw, 300px" className="object-cover group-hover:scale-110 transition-transform duration-700" />
+                    <Image src={youtubeExtractionService.normalizeUrl(song.thumbnailUrl)} alt={song.title} fill sizes="(max-width: 768px) 100vw, 300px" className="object-cover group-hover:scale-110 transition-transform duration-700" />
                     <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                       <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-black shadow-xl scale-90 group-hover:scale-100 transition-transform">
                         {(currentSong?.id === song.id && isBuffering) ? (

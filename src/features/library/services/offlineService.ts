@@ -27,10 +27,41 @@ export class OfflineService {
    *   access blob: URLs that exist only in the WebView's JS context)
    */
   async getOfflineUrl(songId: string): Promise<string | null> {
+    console.log('[OfflineService] GET_OFFLINE_URL for ID:', songId);
     const offlineSong = await db.offlineSongs.get(songId);
-    if (!offlineSong || !offlineSong.audioBlob) return null;
+    if (!offlineSong) {
+      console.log('[OfflineService] No offline song record found in DB for ID:', songId);
+      return null;
+    }
+
+    // Native Android/Tauri Optimization: Use stored file path if available
+    if (offlineSong.filePath && YouTubeExtractionService.isAndroid()) {
+      try {
+        const { Filesystem, Directory } = await import('@capacitor/filesystem');
+        // Extract filename from URI (file:///.../cache/offline_ID.aac)
+        const parts = offlineSong.filePath.split('/');
+        const fileName = parts[parts.length - 1];
+        
+        await Filesystem.stat({
+          path: fileName,
+          directory: Directory.Cache
+        });
+        console.log('[OfflineService] Using cached native URI for:', songId);
+        return offlineSong.filePath;
+      } catch (e) {
+        console.log('[OfflineService] Stored native file missing, re-generating...', songId);
+      }
+    }
+
+    if (!offlineSong.audioBlob) return null;
+
     if (YouTubeExtractionService.isAndroid()) {
-      return this.blobToNativeFileUri(offlineSong.audioBlob, `offline_${songId}`);
+      const uri = await this.blobToNativeFileUri(offlineSong.audioBlob, `offline_${songId}`);
+      if (uri) {
+        // Save the URI back to the database for future use
+        await db.offlineSongs.update(songId, { filePath: uri });
+      }
+      return uri;
     }
     return URL.createObjectURL(offlineSong.audioBlob);
   }
@@ -45,9 +76,17 @@ export class OfflineService {
       const { Filesystem, Directory } = await import('@capacitor/filesystem');
 
       // Determine extension from MIME type
-      const ext = blob.type.includes('webm') ? 'webm'
-                : blob.type.includes('ogg')  ? 'ogg'
-                : 'aac'; // default for audio/aac or audio/mp4
+      let ext = blob.type.includes('image/') ? 'jpg' : 'aac';
+      
+      if (blob.type.includes('webm')) ext = 'webm';
+      else if (blob.type.includes('ogg')) ext = 'ogg';
+      else if (blob.type.includes('mpeg') || blob.type.includes('mp3')) ext = 'mp3';
+      else if (blob.type.includes('jpeg')) ext = 'jpg';
+      else if (blob.type.includes('png')) ext = 'png';
+      else if (blob.type.includes('webp')) ext = 'webp';
+      else if (blob.type.includes('avif')) ext = 'avif';
+
+      console.log(`[OfflineService] blobToNativeFileUri: Identified extension .${ext} for MIME ${blob.type}`);
       const fullName = `${fileName}.${ext}`;
 
       // OPTIMIZATION: Check if the file already exists in cache
@@ -174,25 +213,39 @@ export class OfflineService {
     try {
       console.log(`[OfflineService] Starting download for: ${song.title} (${song.id})`);
       
-      let blob: Blob;
+      // Parallel fetch for audio and thumbnail
+      let audioBlob: Blob;
+      let thumbBlob: Blob | undefined;
 
       // Use local extraction for native apps
       if (YouTubeExtractionService.isAndroid()) {
-        console.log('[OfflineService] Android detected. Performing single-pass native extraction...');
-        blob = await this.fetchNativeBlob('', song.id);
+        console.log('[OfflineService] Android detected. Performing native extraction for:', song.id);
+        const [audio, thumb] = await Promise.all([
+          this.fetchNativeBlob('', song.id),
+          this.fetchNativeBlob(song.thumbnailUrl).catch(() => undefined)
+        ]);
+        audioBlob = audio;
+        thumbBlob = thumb;
       } else {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-        blob = await this.fetchNativeBlob(`${apiUrl}/proxy?id=${song.id}`);
+        const [audio, thumb] = await Promise.all([
+          this.fetchNativeBlob(`${apiUrl}/proxy?id=${song.id}`),
+          this.fetchNativeBlob(song.thumbnailUrl).catch(() => undefined)
+        ]);
+        audioBlob = audio;
+        thumbBlob = thumb;
       }
 
       const offlineSongData: OfflineSong = {
         id: song.id,
         song: song,
-        audioBlob: blob,
+        audioBlob,
+        thumbnailBlob: thumbBlob,
         downloadedAt: Date.now()
       };
 
       await db.offlineSongs.put(offlineSongData);
+      console.log(`[OfflineService] Download complete for: ${song.title}`);
     } catch (error) {
       console.error('[OfflineService] Download error:', error);
       throw error;
@@ -221,19 +274,32 @@ export class OfflineService {
       }
 
       console.log(`[OfflineService] Caching song: ${song.title}`);
-      let blob: Blob;
+      console.log(`[OfflineService] Caching song: ${song.title}`);
+      let audioBlob: Blob;
+      let thumbBlob: Blob | undefined;
       
       if (YouTubeExtractionService.isAndroid()) {
-        blob = await this.fetchNativeBlob('', song.id);
+        const [audio, thumb] = await Promise.all([
+          this.fetchNativeBlob('', song.id),
+          this.fetchNativeBlob(song.thumbnailUrl).catch(() => undefined)
+        ]);
+        audioBlob = audio;
+        thumbBlob = thumb;
       } else {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-        blob = await this.fetchNativeBlob(`${apiUrl}/proxy?id=${song.id}`);
+        const [audio, thumb] = await Promise.all([
+          this.fetchNativeBlob(`${apiUrl}/proxy?id=${song.id}`),
+          this.fetchNativeBlob(song.thumbnailUrl).catch(() => undefined)
+        ]);
+        audioBlob = audio;
+        thumbBlob = thumb;
       }
 
       const cachedSong: CachedSong = {
         id: song.id,
         song: song,
-        audioBlob: blob,
+        audioBlob,
+        thumbnailBlob: thumbBlob,
         cachedAt: Date.now()
       };
       
@@ -270,16 +336,112 @@ export class OfflineService {
   }
 
   async getCachedUrl(songId: string): Promise<string | null> {
+    console.log('[OfflineService] GET_CACHED_URL for ID:', songId);
     const cached = await db.cachedSongs.get(songId);
-    if (!cached || !cached.audioBlob) return null;
+    if (!cached) {
+      console.log('[OfflineService] No cached song record found in DB for ID:', songId);
+      return null;
+    }
+
+    // Native Optimization: Use stored file path if available
+    if (cached.filePath && YouTubeExtractionService.isAndroid()) {
+      try {
+        const { Filesystem, Directory } = await import('@capacitor/filesystem');
+        const parts = cached.filePath.split('/');
+        const fileName = parts[parts.length - 1];
+        
+        await Filesystem.stat({
+          path: fileName,
+          directory: Directory.Cache
+        });
+        console.log('[OfflineService] Using cached native URI for cache entry:', songId);
+        return cached.filePath;
+      } catch (e) {
+        // Missing or error, fallback to regeneration
+      }
+    }
+
+    if (!cached.audioBlob) return null;
+
     if (YouTubeExtractionService.isAndroid()) {
-      return this.blobToNativeFileUri(cached.audioBlob, `cached_${songId}`);
+      const uri = await this.blobToNativeFileUri(cached.audioBlob, `cached_${songId}`);
+      if (uri) {
+        await db.cachedSongs.update(songId, { filePath: uri });
+      }
+      return uri;
     }
     return URL.createObjectURL(cached.audioBlob);
   }
 
   async getAllDownloaded(): Promise<OfflineSong[]> {
     return await db.offlineSongs.toArray();
+  }
+
+  /**
+   * Resolves a song to use local URLs for both audio and thumbnail if available.
+   * This ensures playback and UI work perfectly offline.
+   */
+  async resolveOfflineSong(song: Song): Promise<{ song: Song, audioUrl: string | null }> {
+    // 1. Check permanent download
+    let record: OfflineSong | CachedSong | undefined = await db.offlineSongs.get(song.id);
+    let isCached = false;
+
+    // 2. Check temporary cache
+    if (!record) {
+      record = await db.cachedSongs.get(song.id);
+      isCached = true;
+    }
+
+    if (!record) return { song, audioUrl: null };
+
+    const resolvedSong = { ...song };
+
+    // Resolve Thumbnail
+    try {
+      let needsRepair = false;
+      const { Filesystem, Directory } = await import('@capacitor/filesystem');
+
+      if (record.thumbnailFilePath && YouTubeExtractionService.isAndroid()) {
+        // Validate existing path
+        if (record.thumbnailFilePath.endsWith('.aac')) {
+          console.warn('[OfflineService] Repairing corrupted thumbnail path (was .aac):', record.thumbnailFilePath);
+          needsRepair = true;
+        } else {
+          // Check if file still exists on disk
+          try {
+            const fileName = record.thumbnailFilePath.split('/').pop() || '';
+            await Filesystem.stat({ path: fileName, directory: Directory.Cache });
+            resolvedSong.thumbnailUrl = record.thumbnailFilePath;
+          } catch (e) {
+            console.warn('[OfflineService] Repairing missing thumbnail file:', record.thumbnailFilePath);
+            needsRepair = true;
+          }
+        }
+      }
+
+      if ((!record.thumbnailFilePath || needsRepair) && record.thumbnailBlob) {
+        if (YouTubeExtractionService.isAndroid()) {
+          // On Android, we write image to disk cache for notification usage
+          const uri = await this.blobToNativeFileUri(record.thumbnailBlob, `thumb_${song.id}`);
+          if (uri) {
+            resolvedSong.thumbnailUrl = uri;
+            if (isCached) await db.cachedSongs.update(song.id, { thumbnailFilePath: uri });
+            else await db.offlineSongs.update(song.id, { thumbnailFilePath: uri });
+          }
+        } else {
+          resolvedSong.thumbnailUrl = URL.createObjectURL(record.thumbnailBlob);
+        }
+      } else if (record.thumbnailBlob && !YouTubeExtractionService.isAndroid()) {
+         resolvedSong.thumbnailUrl = URL.createObjectURL(record.thumbnailBlob);
+      }
+    } catch (e) {
+      console.warn('[OfflineService] Failed to resolve local thumbnail:', e);
+    }
+
+    // Resolve Audio URL
+    const audioUrl = isCached ? await this.getCachedUrl(song.id) : await this.getOfflineUrl(song.id);
+
+    return { song: resolvedSong, audioUrl };
   }
 }
 

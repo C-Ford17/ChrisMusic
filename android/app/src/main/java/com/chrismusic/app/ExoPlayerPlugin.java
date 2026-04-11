@@ -3,11 +3,11 @@ package com.chrismusic.app;
 import android.Manifest;
 import android.content.Context;
 import android.content.Intent;
-import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 
+import androidx.annotation.Nullable;
 import androidx.annotation.OptIn;
 import androidx.media3.common.ForwardingPlayer;
 import androidx.media3.common.MediaItem;
@@ -16,7 +16,11 @@ import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.ExoPlayer;
-import androidx.media3.session.MediaSession;
+
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ScheduledFuture;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -24,7 +28,6 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
-import com.getcapacitor.PermissionState;
 
 @CapacitorPlugin(
     name = "ExoPlayer",
@@ -41,32 +44,120 @@ public class ExoPlayerPlugin extends Plugin {
 
     // Progress polling interval in ms
     private static final long PROGRESS_INTERVAL_MS = 500;
+    private static ExoPlayerPlugin instance;
 
-    private ExoPlayer exoPlayer;
-    private static MediaSession mediaSession; // Static so MusicPlayerService can access it
-    private final Handler progressHandler = new Handler(Looper.getMainLooper());
-    private Runnable progressRunnable;
+    private final ScheduledExecutorService progressExecutor = Executors.newSingleThreadScheduledExecutor();
+    private ScheduledFuture<?> progressFuture;
     private boolean serviceStarted = false;
+    private String lastNotifiedState = "none";
+    private String lastMediaId = null;
+    private Player.Listener playerListener;
+    private boolean isAppInBackground = false;
+    private int backgroundPollCount = 0;
 
-    public static MediaSession getMediaSession() {
-        return mediaSession;
+    // ─── Static Bridge (Service → Plugin) ───────────────────────────────────
+
+    public static void onNativeNext() {
+        if (instance != null) {
+            instance.notifyListeners("onNativeNext", null);
+        }
+    }
+
+    public static void onNativePrevious() {
+        if (instance != null) {
+            instance.notifyListeners("onNativePrevious", null);
+        }
     }
 
     // ─── Lifecycle ───────────────────────────────────────────────────────────
 
     @Override
     public void load() {
-        // Plugin loaded — ExoPlayer is created lazily on first load() call
         Log.d(TAG, "[ExoPlayerPlugin] Plugin loaded");
+        instance = this;
+        // Start service early on app launch
+        startMusicService();
     }
 
     @Override
     protected void handleOnDestroy() {
+        Log.d(TAG, "[ExoPlayerPlugin] Plugin destroying, cleaning up resources...");
         stopProgressPolling();
-        releasePlayer();
+        
+        // Shut down the executor to prevent thread leaks
+        try {
+            progressExecutor.shutdownNow();
+        } catch (Exception e) {
+            Log.w(TAG, "Error shutting down progress executor", e);
+        }
+
+        removePlayerListener();
+        instance = null;
+        // DO NOT releasePlayer here. We want it to stay alive in the Service.
+    }
+
+    @Override
+    protected void handleOnPause() {
+        Log.d(TAG, "[ExoPlayerPlugin] App moving to background. Skipping progress events.");
+        isAppInBackground = true;
+        // Optional: stopProgressPolling(); // We can keep polling but skip notify to avoid bridge flooding
+    }
+
+    @Override
+    protected void handleOnResume() {
+        Log.d(TAG, "[ExoPlayerPlugin] App returned to foreground. Resuming progress updates.");
+        isAppInBackground = false;
+        
+        // Force an immediate progress update to refresh UI
+        new Handler(Looper.getMainLooper()).post(() -> {
+            Player player = MusicPlayerService.getExoPlayer();
+            if (player != null && player.isPlaying()) {
+                sendProgressToJS(player);
+            }
+        });
     }
 
     // ─── Plugin Methods (JS → Native) ────────────────────────────────────────
+
+    @PluginMethod
+    public void getPlaybackState(PluginCall call) {
+        new Handler(Looper.getMainLooper()).post(() -> {
+            try {
+                Player player = MusicPlayerService.getExoPlayer();
+                JSObject result = new JSObject();
+                if (player != null) {
+                    result.put("isPlaying", player.isPlaying());
+                    result.put("currentPosition", player.getCurrentPosition() / 1000.0);
+                    result.put("duration", player.getDuration() / 1000.0);
+                    
+                    MediaItem item = player.getCurrentMediaItem();
+                    if (item != null) {
+                        result.put("mediaId", item.mediaId);
+                        if (item.localConfiguration != null) {
+                            result.put("url", item.localConfiguration.uri.toString());
+                        }
+                        if (item.mediaMetadata.title != null) {
+                            result.put("title", item.mediaMetadata.title.toString());
+                        }
+                    }
+
+                    // Map internal state to our string states
+                    int state = player.getPlaybackState();
+                    String stateStr = "paused";
+                    if (state == Player.STATE_BUFFERING) stateStr = "loading";
+                    else if (player.isPlaying()) stateStr = "playing";
+                    else if (state == Player.STATE_ENDED) stateStr = "ended";
+                    
+                    result.put("state", stateStr);
+                } else {
+                    result.put("state", "none");
+                }
+                call.resolve(result);
+            } catch (Exception e) {
+                call.reject("Failed to get playback state", e);
+            }
+        });
+    }
 
     @PluginMethod
     public void load(PluginCall call) {
@@ -74,6 +165,7 @@ public class ExoPlayerPlugin extends Plugin {
         String title = call.getString("title", "ChrisMusic");
         String artist = call.getString("artist", "");
         String artwork = call.getString("artwork", "");
+        String id = call.getString("id", "");
 
         if (url == null || url.isEmpty()) {
             call.reject("url is required");
@@ -82,7 +174,15 @@ public class ExoPlayerPlugin extends Plugin {
 
         new Handler(Looper.getMainLooper()).post(() -> {
             try {
-                ensurePlayerCreated();
+                Player player = getOrStartPlayer();
+                if (player == null) {
+                    call.reject("Failed to initialize ExoPlayer");
+                    return;
+                }
+
+                // Immediate cleanup to prevent audio overlap and clear old session data
+                player.stop();
+                player.clearMediaItems();
 
                 // Build MediaItem with metadata for MediaSession / notification
                 MediaMetadata.Builder metaBuilder = new MediaMetadata.Builder()
@@ -97,17 +197,16 @@ public class ExoPlayerPlugin extends Plugin {
 
                 MediaItem mediaItem = new MediaItem.Builder()
                         .setUri(url)
+                        .setMediaId(id)
                         .setMediaMetadata(mediaMetadata)
                         .build();
 
-                exoPlayer.setMediaItem(mediaItem);
-                exoPlayer.prepare();
-                exoPlayer.setPlayWhenReady(true);
+                player.setMediaItem(mediaItem);
+                player.prepare();
+                player.setPlayWhenReady(true);
 
                 notifyStateChange("loading");
 
-
-                startMusicService();
                 startProgressPolling();
 
                 call.resolve();
@@ -119,11 +218,54 @@ public class ExoPlayerPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void addNextItem(PluginCall call) {
+        String url = call.getString("url");
+        String title = call.getString("title", "");
+        String artist = call.getString("artist", "");
+        String artwork = call.getString("artwork", "");
+        String id = call.getString("id", "");
+
+        if (url == null || url.isEmpty()) {
+            call.reject("url is required");
+            return;
+        }
+
+        new Handler(Looper.getMainLooper()).post(() -> {
+            try {
+                Player player = getOrStartPlayer();
+                if (player == null) return;
+
+                // Build MediaItem with metadata
+                androidx.media3.common.MediaMetadata metadata = new androidx.media3.common.MediaMetadata.Builder()
+                        .setTitle(title)
+                        .setArtist(artist)
+                        .setArtworkUri(artwork != null && !artwork.isEmpty() ? android.net.Uri.parse(artwork) : null)
+                        .build();
+
+                androidx.media3.common.MediaItem mediaItem = new androidx.media3.common.MediaItem.Builder()
+                        .setMediaId(id) // Track ID for JS syncing
+                        .setUri(url)
+                        .setMediaMetadata(metadata)
+                        .build();
+
+                // Add to the end of currently playing items
+                player.addMediaItem(mediaItem);
+                Log.d(TAG, "[ExoPlayerPlugin] Native Next Item added: " + title);
+                call.resolve();
+            } catch (Exception e) {
+                call.reject(e.getMessage());
+            }
+        });
+    }
+
+    private MusicPlayerService.PlayerEventListener centralListener;
+
+    @PluginMethod
     public void play(PluginCall call) {
         new Handler(Looper.getMainLooper()).post(() -> {
-            if (exoPlayer != null) {
-                exoPlayer.play();
-                notifyStateChange("playing");
+            Player player = getOrStartPlayer();
+            if (player != null) {
+                player.play();
             }
             call.resolve();
         });
@@ -132,9 +274,9 @@ public class ExoPlayerPlugin extends Plugin {
     @PluginMethod
     public void pause(PluginCall call) {
         new Handler(Looper.getMainLooper()).post(() -> {
-            if (exoPlayer != null) {
-                exoPlayer.pause();
-                notifyStateChange("paused");
+            Player player = getOrStartPlayer();
+            if (player != null) {
+                player.pause();
             }
             call.resolve();
         });
@@ -148,8 +290,9 @@ public class ExoPlayerPlugin extends Plugin {
             return;
         }
         new Handler(Looper.getMainLooper()).post(() -> {
-            if (exoPlayer != null) {
-                exoPlayer.seekTo((long) (seconds * 1000));
+            Player player = getOrStartPlayer();
+            if (player != null) {
+                player.seekTo((long) (seconds * 1000));
             }
             call.resolve();
         });
@@ -159,12 +302,56 @@ public class ExoPlayerPlugin extends Plugin {
     public void stop(PluginCall call) {
         new Handler(Looper.getMainLooper()).post(() -> {
             stopProgressPolling();
-            if (exoPlayer != null) {
-                exoPlayer.stop();
-                exoPlayer.clearMediaItems();
+            Player player = getOrStartPlayer();
+            if (player != null) {
+                player.stop();
+                player.clearMediaItems();
+            }
+            // We NO LONGER call stopMusicService() here. 
+            // We want the service to stay alive for fast song switching and notification persistence.
+            notifyStateChange("paused");
+            call.resolve();
+        });
+    }
+
+    @PluginMethod
+    public void terminate(PluginCall call) {
+        new Handler(Looper.getMainLooper()).post(() -> {
+            stopProgressPolling();
+            Player player = getOrStartPlayer();
+            if (player != null) {
+                player.stop();
+                player.clearMediaItems();
             }
             stopMusicService();
             notifyStateChange("paused");
+            call.resolve();
+        });
+    }
+
+    @PluginMethod
+    public void setRepeatMode(PluginCall call) {
+        String mode = call.getString("mode", "off"); // off, one, all
+        new Handler(Looper.getMainLooper()).post(() -> {
+            Player player = getOrStartPlayer();
+            if (player != null) {
+                int exoMode = Player.REPEAT_MODE_OFF;
+                if ("one".equals(mode)) exoMode = Player.REPEAT_MODE_ONE;
+                else if ("all".equals(mode)) exoMode = Player.REPEAT_MODE_ALL;
+                player.setRepeatMode(exoMode);
+            }
+            call.resolve();
+        });
+    }
+
+    @PluginMethod
+    public void setShuffleMode(PluginCall call) {
+        boolean enabled = call.getBoolean("enabled", false);
+        new Handler(Looper.getMainLooper()).post(() -> {
+            Player player = getOrStartPlayer();
+            if (player != null) {
+                player.setShuffleModeEnabled(enabled);
+            }
             call.resolve();
         });
     }
@@ -177,8 +364,9 @@ public class ExoPlayerPlugin extends Plugin {
             return;
         }
         new Handler(Looper.getMainLooper()).post(() -> {
-            if (exoPlayer != null) {
-                exoPlayer.setVolume(volume.floatValue());
+            Player player = getOrStartPlayer();
+            if (player != null) {
+                player.setVolume(volume.floatValue());
             }
             call.resolve();
         });
@@ -188,11 +376,12 @@ public class ExoPlayerPlugin extends Plugin {
     public void getCurrentState(PluginCall call) {
         new Handler(Looper.getMainLooper()).post(() -> {
             JSObject ret = new JSObject();
-            if (exoPlayer != null) {
-                ret.put("isPlaying", exoPlayer.isPlaying());
-                ret.put("current", exoPlayer.getCurrentPosition() / 1000.0);
-                ret.put("duration", exoPlayer.getDuration() == androidx.media3.common.C.TIME_UNSET
-                        ? 0 : exoPlayer.getDuration() / 1000.0);
+            Player player = getOrStartPlayer();
+            if (player != null) {
+                ret.put("isPlaying", player.isPlaying());
+                ret.put("current", player.getCurrentPosition() / 1000.0);
+                ret.put("duration", player.getDuration() == androidx.media3.common.C.TIME_UNSET
+                        ? 0 : player.getDuration() / 1000.0);
             } else {
                 ret.put("isPlaying", false);
                 ret.put("current", 0);
@@ -205,104 +394,55 @@ public class ExoPlayerPlugin extends Plugin {
     // ─── Internal helpers ────────────────────────────────────────────────────
 
     @OptIn(markerClass = UnstableApi.class)
-    private void ensurePlayerCreated() {
-        if (exoPlayer != null) {
-            return;
+    private Player getOrStartPlayer() {
+        Player player = MusicPlayerService.getOrInitializePlayer(getContext());
+        startMusicService();
+        
+        // Ensure we are subscribed to the central service events
+        if (centralListener == null) {
+            setupCentralListener();
         }
+        
+        return player;
+    }
 
-        Context context = getContext();
-
-        // Build AudioAttributes for Media
-        androidx.media3.common.AudioAttributes audioAttributes = new androidx.media3.common.AudioAttributes.Builder()
-                .setUsage(androidx.media3.common.C.USAGE_MEDIA)
-                .setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MUSIC)
-                .build();
-
-        exoPlayer = new ExoPlayer.Builder(context)
-                .setAudioAttributes(audioAttributes, true) // true = handle audio focus automatically
-                .build();
-
-        // Wake mode keeps CPU and Wi-Fi alive during playback.
-        // Requires WAKE_LOCK permission in AndroidManifest.
-        exoPlayer.setWakeMode(androidx.media3.common.C.WAKE_MODE_NETWORK);
-
-        // Wrap ExoPlayer in a ForwardingPlayer
-        // Since we manage the queue in JS, ExoPlayer only has 1 item.
-        // Media3 normally hides Next/Prev buttons if queue is 1.
-        // ForwardingPlayer tricks it into always showing them and intercepts clicks.
-        ForwardingPlayer forwardingPlayer = new ForwardingPlayer(exoPlayer) {
+    private void setupCentralListener() {
+        centralListener = new MusicPlayerService.PlayerEventListener() {
             @Override
-            public Player.Commands getAvailableCommands() {
-                return super.getAvailableCommands().buildUpon()
-                        .add(Player.COMMAND_SEEK_TO_NEXT)
-                        .add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
-                        .add(Player.COMMAND_SEEK_TO_PREVIOUS)
-                        .add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
-                        .build();
-            }
-
-            @Override
-            public boolean isCommandAvailable(int command) {
-                if (command == Player.COMMAND_SEEK_TO_NEXT || command == Player.COMMAND_SEEK_TO_PREVIOUS ||
-                    command == Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM || command == Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM) {
-                    return true;
+            public void onMediaItemTransition(@Nullable MediaItem mediaItem, int reason) {
+                if (mediaItem != null && mediaItem.mediaId != null) {
+                    if (mediaItem.mediaId.equals(lastMediaId)) return;
+                    lastMediaId = mediaItem.mediaId;
+                    
+                    Log.i(TAG, "BRIDGE_EVENT: onMediaItemTransition to: " + mediaItem.mediaId);
+                    JSObject data = new JSObject();
+                    data.put("id", mediaItem.mediaId);
+                    notifyListeners("onNativeTrackChange", data);
                 }
-                return super.isCommandAvailable(command);
-            }
-
-            @Override
-            public boolean hasNextMediaItem() {
-                return true;
-            }
-
-            @Override
-            public boolean hasPreviousMediaItem() {
-                return true;
-            }
-
-            @Override
-            public void seekToNext() {
-                new Handler(Looper.getMainLooper()).post(() -> notifyListeners("onNativeNext", new JSObject()));
-            }
-
-            @Override
-            public void seekToNextMediaItem() {
-                new Handler(Looper.getMainLooper()).post(() -> notifyListeners("onNativeNext", new JSObject()));
-            }
-
-            @Override
-            public void seekToPrevious() {
-                new Handler(Looper.getMainLooper()).post(() -> notifyListeners("onNativePrevious", new JSObject()));
-            }
-
-            @Override
-            public void seekToPreviousMediaItem() {
-                new Handler(Looper.getMainLooper()).post(() -> notifyListeners("onNativePrevious", new JSObject()));
-            }
-
-        };
-
-        // Pass forwardingPlayer to MediaSession instead of exoPlayer
-        mediaSession = new MediaSession.Builder(context, forwardingPlayer).build();
-
-        exoPlayer.addListener(new Player.Listener() {
-            @Override
-            public void onIsPlayingChanged(boolean isPlaying) {
-                notifyStateChange(isPlaying ? "playing" : "paused");
             }
 
             @Override
             public void onPlaybackStateChanged(int playbackState) {
+                Log.i(TAG, "BRIDGE_EVENT: onPlaybackStateChanged: " + playbackState);
+                ExoPlayer base = MusicPlayerService.getExoPlayer();
+                if (base == null) return;
+
                 switch (playbackState) {
                     case Player.STATE_BUFFERING:
                         notifyStateChange("loading");
                         break;
                     case Player.STATE_READY:
-                        notifyStateChange(exoPlayer.isPlaying() ? "playing" : "paused");
+                        // Only notify 'paused' if we reached READY and the user INTENDS to stay paused.
+                        // (e.g. initial session restoration).
+                        // If playWhenReady is true, we will be notified by onIsPlayingChanged(true) soon.
+                        if (!base.getPlayWhenReady() && !base.isPlaying()) {
+                            Log.i(TAG, "BRIDGE_EVENT: STATE_READY (intentional pause). Notifying JS.");
+                            notifyStateChange("paused");
+                        }
                         break;
                     case Player.STATE_ENDED:
+                        Log.e(TAG, "BRIDGE_EVENT: STATE_ENDED. Sending 'ended' to JS.");
                         notifyStateChange("ended");
-                        stopProgressPolling();
                         break;
                     case Player.STATE_IDLE:
                         // no-op
@@ -310,21 +450,78 @@ public class ExoPlayerPlugin extends Plugin {
                 }
             }
 
+            @Override
+            public void onIsPlayingChanged(boolean isPlaying) {
+                Log.i(TAG, "BRIDGE_EVENT: onIsPlayingChanged: " + isPlaying);
+                
+                ExoPlayer base = MusicPlayerService.getExoPlayer();
+                if (base == null) return;
 
+                int state = base.getPlaybackState();
+                
+                if (state == Player.STATE_ENDED) {
+                    notifyStateChange("ended");
+                    return;
+                }
+
+                if (!isPlaying) {
+                    // Initial load/buffering protection.
+                    if (base.getPlayWhenReady() && (state == Player.STATE_BUFFERING || state == Player.STATE_READY)) {
+                        Log.d(TAG, "BRIDGE_EVENT: Intended to play. Ignoring technical 'non-playing' state.");
+                        return;
+                    }
+
+                    // Reset/Stop handling
+                    if (state == Player.STATE_IDLE) {
+                        notifyStateChange("paused");
+                        return;
+                    }
+                }
+                
+                notifyStateChange(isPlaying ? "playing" : "paused");
+            }
 
             @Override
-            public void onPlayerError(PlaybackException error) {
-                Log.e(TAG, "ExoPlayer error: " + error.getMessage(), error);
+            public void onPlayerError(String error, int errorCode) {
+                Log.e(TAG, "BRIDGE_EVENT: Player error: " + error + " (code: " + errorCode + ")");
                 JSObject data = new JSObject();
                 data.put("state", "error");
-                data.put("error", error.getMessage());
+                data.put("error", error);
+                data.put("errorCode", errorCode);
                 notifyListeners("onStateChange", data);
                 stopProgressPolling();
             }
-        });
+        };
+        MusicPlayerService.addEventListener(centralListener);
+    }
+
+    private void removePlayerListener() {
+        // 1. Remove the direct player listener if any
+        Player player = MusicPlayerService.getForwardingPlayer();
+        if (player != null && playerListener != null) {
+            player.removeListener(playerListener);
+            playerListener = null;
+        }
+        // 2. Remove the central listener from the service
+        if (centralListener != null) {
+            MusicPlayerService.removeEventListener(centralListener);
+            centralListener = null;
+        }
     }
 
     private void notifyStateChange(String state) {
+        if (state.equals(lastNotifiedState)) return;
+        lastNotifiedState = state;
+        
+        Log.i(TAG, "[ExoPlayerPlugin] notifyStateChange: " + state);
+
+        // Optimization: Start/Stop polling based on state
+        if ("playing".equals(state)) {
+            startProgressPolling();
+        } else if ("paused".equals(state) || "ended".equals(state) || "error".equals(state)) {
+            stopProgressPolling();
+        }
+
         JSObject data = new JSObject();
         data.put("state", state);
         notifyListeners("onStateChange", data);
@@ -334,69 +531,73 @@ public class ExoPlayerPlugin extends Plugin {
 
     private void startProgressPolling() {
         stopProgressPolling();
-        progressRunnable = new Runnable() {
-            @Override
-            public void run() {
-                if (exoPlayer != null && exoPlayer.isPlaying()) {
-                    long currentMs = exoPlayer.getCurrentPosition();
-                    long durationMs = exoPlayer.getDuration();
-
-                    JSObject data = new JSObject();
-                    data.put("current", currentMs / 1000.0);
-                    data.put("duration", durationMs == androidx.media3.common.C.TIME_UNSET
-                            ? 0 : durationMs / 1000.0);
-                    notifyListeners("onProgress", data);
+        Log.d(TAG, "[ExoPlayerPlugin] Starting background progress polling...");
+        
+        backgroundPollCount = 0;
+        progressFuture = progressExecutor.scheduleAtFixedRate(() -> {
+            new Handler(Looper.getMainLooper()).post(() -> {
+                try {
+                    ExoPlayer player = MusicPlayerService.getExoPlayer();
+                    if (player != null && player.isPlaying()) {
+                        if (isAppInBackground) {
+                            // Reduced frequency in background (every 5 seconds) to avoid hangs 
+                            // but keep WebView/bridge alive for state transitions
+                            backgroundPollCount++;
+                            if (backgroundPollCount >= 10) {
+                                backgroundPollCount = 0;
+                                sendProgressToJS(player);
+                            }
+                        } else {
+                            sendProgressToJS(player);
+                        }
+                    }
+                } catch (Exception e) {
+                    Log.e(TAG, "Error in progress polling task: " + e.getMessage());
                 }
-                progressHandler.postDelayed(this, PROGRESS_INTERVAL_MS);
-            }
-        };
-        progressHandler.postDelayed(progressRunnable, PROGRESS_INTERVAL_MS);
+            });
+        }, 0, PROGRESS_INTERVAL_MS, TimeUnit.MILLISECONDS);
     }
 
     private void stopProgressPolling() {
-        if (progressRunnable != null) {
-            progressHandler.removeCallbacks(progressRunnable);
-            progressRunnable = null;
+        if (progressFuture != null) {
+            progressFuture.cancel(false);
+            progressFuture = null;
         }
+    }
+
+    private void sendProgressToJS(Player player) {
+        long currentMs = player.getCurrentPosition();
+        long durationMs = player.getDuration();
+
+        JSObject data = new JSObject();
+        data.put("current", currentMs / 1000.0);
+        data.put("duration", durationMs == androidx.media3.common.C.TIME_UNSET
+                ? 0 : durationMs / 1000.0);
+        
+        notifyListeners("onProgress", data);
     }
 
     // ─── ForegroundService ───────────────────────────────────────────────────
 
     private void startMusicService() {
-        if (serviceStarted) return; // Don't restart if already running
+        if (serviceStarted) return;
         try {
             Context context = getContext();
             Intent intent = new Intent(context, MusicPlayerService.class);
             context.startService(intent);
             serviceStarted = true;
-            Log.d(TAG, "MusicPlayerService started manually");
         } catch (Exception e) {
             Log.w(TAG, "Failed to start MusicPlayerService: " + e.getMessage());
         }
     }
 
     private void stopMusicService() {
-        if (!serviceStarted) return;
+        serviceStarted = false;
         try {
             Context context = getContext();
             context.stopService(new Intent(context, MusicPlayerService.class));
-            serviceStarted = false;
         } catch (Exception e) {
             Log.w(TAG, "Failed to stop MusicPlayerService: " + e.getMessage());
         }
-    }
-
-    // ─── Cleanup ─────────────────────────────────────────────────────────────
-
-    private void releasePlayer() {
-        if (mediaSession != null) {
-            mediaSession.release();
-            mediaSession = null;
-        }
-        if (exoPlayer != null) {
-            exoPlayer.release();
-            exoPlayer = null;
-        }
-        stopMusicService();
     }
 }

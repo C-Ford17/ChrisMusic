@@ -50,7 +50,9 @@ export interface OfflineSong {
   id: string; // YouTube Video ID
   song: LocalSong;
   audioBlob?: Blob; // Optional for Web (PWA)
-  filePath?: string; // Optional for Native (Tauri)
+  filePath?: string; // Optional for Native (Capacitor)
+  thumbnailBlob?: Blob; // Image for offline display
+  thumbnailFilePath?: string; // Image for native notification
   downloadedAt: number;
 }
 
@@ -58,7 +60,9 @@ export interface CachedSong {
   id: string; // YouTube Video ID
   song: LocalSong;
   audioBlob?: Blob; // Added for Web/Capacitor
-  filePath?: string; // Optional for Native (Tauri)
+  filePath?: string; // Optional for Native (Capacitor)
+  thumbnailBlob?: Blob;
+  thumbnailFilePath?: string;
   cachedAt: number;
 }
 
@@ -85,7 +89,8 @@ export class ChrisMusicDB extends Dexie {
 
     // Version 2-6 were incremental but incomplete (Dexie requires full schema in each version)
     // Consolidating everything in Version 7
-    this.version(7).stores({
+    // Version 8: Added thumbnail storage
+    this.version(8).stores({
       favorites: 'id, addedAt',
       history: '++id, playedAt',
       playlists: 'id, createdAt',

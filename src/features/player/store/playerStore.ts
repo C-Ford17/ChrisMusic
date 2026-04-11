@@ -5,7 +5,7 @@ import { LibraryService } from '@/features/library/services/libraryService';
 import { lyricsService, type LyricsLine, type LyricsData } from '@/features/lyrics/services/lrclibService';
 import { offlineService } from '@/features/library/services/offlineService';
 import { audioEngine } from '@/features/player/services/audioEngine';
-import { youtubeExtractionService } from '@/features/player/services/youtubeExtractionService';
+import { youtubeExtractionService, YouTubeExtractionService } from '@/features/player/services/youtubeExtractionService';
 import { db } from '@/core/db/db';
 import { toast } from 'sonner';
 
@@ -113,13 +113,22 @@ export const usePlayerStore = create<PlayerState>()(
         }
       },
 
-      toggleShuffle: () => set((state) => ({ isShuffle: !state.isShuffle })),
+      toggleShuffle: () => {
+        const nextShuffle = !get().isShuffle;
+        set({ isShuffle: nextShuffle });
+        audioEngine.setShuffleMode(nextShuffle);
+      },
 
-      toggleRepeatMode: () => set((state) => {
-        const modes: ('off' | 'all' | 'one')[] = ['off', 'all', 'one'];
-        const nextIndex = (modes.indexOf(state.repeatMode) + 1) % modes.length;
-        return { repeatMode: modes[nextIndex] };
-      }),
+      toggleRepeatMode: () => {
+        const { repeatMode } = get();
+        let nextMode: 'off' | 'one' | 'all' = 'off';
+        if (repeatMode === 'off') nextMode = 'all';
+        else if (repeatMode === 'all') nextMode = 'one';
+        else if (repeatMode === 'one') nextMode = 'off';
+
+        set({ repeatMode: nextMode });
+        audioEngine.setRepeatMode(nextMode);
+      },
 
       playSong: async (song: Song, startSeconds: number = 0) => {
         // Prevent double loading the same song if already buffering
@@ -169,23 +178,20 @@ export const usePlayerStore = create<PlayerState>()(
         LibraryService.recordPlay(song);
         get().fetchLyrics(song);
 
-        // 1. Check for already-downloaded offline file first (Permanent)
-        const offlineUrl = await offlineService.getOfflineUrl(song.id);
-        if (offlineUrl) {
-          console.log('[PlayerStore] Source: Offline (Permanent)');
-          await audioEngine.loadSong(song, startSeconds, true, offlineUrl);
+        // Handle Offline/Cache resolution (including images)
+        const { song: resolvedSong, audioUrl } = await offlineService.resolveOfflineSong(song);
+        
+        if (audioUrl) {
+          console.log('[PlayerStore] Source: Offline/Cache');
+          set({ currentSong: resolvedSong }); // Update with local thumbnail
+          await audioEngine.loadSong(resolvedSong, startSeconds, true, audioUrl);
           get().prefetchNext();
           return;
         }
 
-        // 2. Check for cached file (Temporary/Rolling)
-        const cachedUrl = await offlineService.getCachedUrl(song.id);
-        if (cachedUrl) {
-          console.log('[PlayerStore] Source: Cache (Temporary)');
-          await audioEngine.loadSong(song, startSeconds, true, cachedUrl);
-          offlineService.cacheSong(song); // Update timestamp
-          get().prefetchNext();
-          return;
+        const isMarkedOffline = await offlineService.isDownloaded(song.id);
+        if (isMarkedOffline) {
+          console.warn('[PlayerStore] Song is marked as downloaded but local file could not be resolved. Falling back to stream.');
         }
 
         try {
@@ -197,6 +203,10 @@ export const usePlayerStore = create<PlayerState>()(
           
           // Background: Prefetch next song
           get().prefetchNext();
+
+          // Sync repeat mode natively (especially for "Repeat One")
+          const { repeatMode } = get();
+          audioEngine.setRepeatMode(repeatMode);
         } catch (e) {
           console.error('[PlayerStore] playSong failed:', e);
           set({ isBuffering: false, isPlaying: false });
@@ -222,23 +232,20 @@ export const usePlayerStore = create<PlayerState>()(
         LibraryService.recordPlay(song);
         get().fetchLyrics(song);
 
-        // 1. Offline (Permanent)
-        const offlineUrl = await offlineService.getOfflineUrl(song.id);
-        if (offlineUrl) {
-          console.log('[PlayerStore] Source: Offline (Permanent)');
-          await audioEngine.loadSong(song, startSeconds, true, offlineUrl);
+        // 1. Handle Offline/Cache resolution (including images)
+        const { song: resolvedSong, audioUrl } = await offlineService.resolveOfflineSong(song);
+
+        if (audioUrl) {
+          console.log('[PlayerStore] Source: Offline/Cache');
+          set({ currentSong: resolvedSong }); // Update with local thumbnail
+          await audioEngine.loadSong(resolvedSong, startSeconds, true, audioUrl);
           get().prefetchNext();
           return;
         }
 
-        // 2. Cache (Temporary/Rolling)
-        const cachedUrl = await offlineService.getCachedUrl(song.id);
-        if (cachedUrl) {
-          console.log('[PlayerStore] Source: Cache (Temporary)');
-          await audioEngine.loadSong(song, startSeconds, true, cachedUrl);
-          offlineService.cacheSong(song); // Update timestamp
-          get().prefetchNext();
-          return;
+        const isMarkedOffline = await offlineService.isDownloaded(song.id);
+        if (isMarkedOffline) {
+          console.warn('[PlayerStore] Song is marked as downloaded but local file could not be resolved. Falling back to stream.');
         }
 
         try {
@@ -279,12 +286,29 @@ export const usePlayerStore = create<PlayerState>()(
         get().playSongInQueue(newSong, queue);
       },
 
-      play: () => {
+      play: async () => {
         const { currentSong, queue, progress } = get();
-        if (currentSong && !audioEngine.hasSource()) {
+        if (!currentSong) return;
+
+        // On Android, if we re-enter the app, we need to check if the engine 
+        // is already playing this song before triggering a full reload.
+        if (YouTubeExtractionService.isAndroid()) {
+          const isNativePlaying = await audioEngine.isPlayingNative();
+          const nativeSource = (audioEngine as any).hasSource?.();
+          
+          if (isNativePlaying || nativeSource) {
+            console.log('[PlayerStore] Native engine already has a source or is playing. Just sending play command.');
+            set({ isPlaying: true });
+            audioEngine.play();
+            return;
+          }
+        }
+
+        if (!audioEngine.hasSource()) {
           get().playSongInQueue(currentSong, queue, progress);
           return;
         }
+
         set({ isPlaying: true });
         audioEngine.play();
       },
@@ -437,6 +461,8 @@ export const usePlayerStore = create<PlayerState>()(
         }
       },
 
+
+
       setShowLyrics: (show: boolean) => set({ showLyrics: show }),
       setIsBuffering: (isBuffering: boolean) => set({ isBuffering }),
       
@@ -450,18 +476,22 @@ export const usePlayerStore = create<PlayerState>()(
         const nextSong = queue[currentIndex + 1];
         if (prefetchingId === nextSong.id) return; // Already prefetching
 
-        // Check if already offline or cached
-        const isOffline = await offlineService.isDownloaded(nextSong.id);
-        const cachedUrl = await offlineService.getCachedUrl(nextSong.id);
-        if (isOffline || cachedUrl) return;
-
-        console.log('[PlayerStore] Prefetching next song URL:', nextSong.title);
-        set({ prefetchingId: nextSong.id });
+        // Handle Offline/Cache resolution for prefetching
+        const { song: resolvedNext, audioUrl } = await offlineService.resolveOfflineSong(nextSong);
         
+        if (audioUrl) {
+          console.log('[PlayerStore] Prefetch: Song is offline, registering native next track');
+          await audioEngine.addNextTrack(resolvedNext, audioUrl);
+          return;
+        }
+
+        set({ prefetchingId: nextSong.id });
         try {
-          // Note: we just extract the URL so it's ready in yt-dlp internal cache or similar
-          // For a more aggressive approach, we could call offlineService.cacheSong(nextSong)
-          await youtubeExtractionService.getStreamUrl(nextSong.id);
+          const url = await youtubeExtractionService.getStreamUrl(nextSong.id);
+          if (url) {
+            console.log('[PlayerStore] Prefetch: Extracted URL, registering native next track');
+            await audioEngine.addNextTrack(nextSong, url);
+          }
         } catch (e) {
           console.warn('[PlayerStore] Prefetch failed:', e);
         } finally {
@@ -511,3 +541,78 @@ if (typeof window !== 'undefined') {
     console.log('[PlayerStore] Initial native init deferred or failed:', err);
   });
 }
+
+// ─── Global Audio Listener Setup ─────────────────────────────────────────────
+
+/**
+ * Initializes global synchronization between the AudioEngine and the playerStore.
+ * This should be called once at app startup.
+ */
+export const initPlayerStoreSync = () => {
+  const store = usePlayerStore.getState();
+
+  // 1. Sync Playback State (Playing, Paused, Loading)
+  audioEngine.setOnStateChange((state) => {
+    const isPlaying = state === 1;
+    const isBuffering = state === 3;
+    const isEnded = state === 0;
+
+    usePlayerStore.setState({ 
+      isPlaying, 
+      isBuffering 
+    });
+
+    if (isEnded) {
+      console.log('[PlayerStoreSync] Song ended natively, triggering playNext fallback.');
+      usePlayerStore.getState().playNext(true);
+    }
+  });
+
+  // 2. Sync Native Track Changes (for Background Playlist support)
+  audioEngine.setOnTrackChange((id) => {
+    const { currentSong, queue, isPlaying } = usePlayerStore.getState();
+    
+    // If the native engine changed song without JS knowing (background)
+    if (currentSong?.id !== id) {
+      console.log('[PlayerStoreSync] Native track change detected:', id);
+      
+      const nextIndex = queue.findIndex(s => s.id === id);
+      if (nextIndex !== -1) {
+        usePlayerStore.setState({ 
+          currentSong: queue[nextIndex],
+          progress: 0,
+          isBuffering: false,
+          isPlaying: true // If it changed natively, it's likely playing
+        });
+        
+        // Update lyrics for the new song
+        usePlayerStore.getState().fetchLyrics(queue[nextIndex]);
+        
+        // Prepare NEXT one for native playlist
+        usePlayerStore.getState().prefetchNext();
+      }
+    }
+  });
+
+  // 3. Sync Progress and Duration
+  // (The plugin already sends onProgress events which AudioEngine handles internally)
+  audioEngine.onProgress = (data) => {
+    usePlayerStore.setState({
+      progress: Math.floor(data.current),
+      duration: Math.floor(data.duration)
+    });
+  };
+
+  // 4. Sync Native Errors (Auto-Recovery)
+  audioEngine.setOnError(async (error) => {
+    const { currentSong, progress } = usePlayerStore.getState();
+    console.warn('[PlayerStoreSync] Native error received, attempting auto-recovery:', error);
+    
+    if (currentSong) {
+      // Small buffer to ensure the old track is dead
+      await new Promise(r => setTimeout(r, 500));
+      // Re-load song at last known position
+      await usePlayerStore.getState().playSong(currentSong, progress);
+    }
+  });
+};

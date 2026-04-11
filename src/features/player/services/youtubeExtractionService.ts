@@ -19,6 +19,7 @@ import type { PluginListenerHandle } from '@capacitor/core';
 export interface ExoStateChangeEvent {
   state: 'loading' | 'playing' | 'paused' | 'ended' | 'error';
   error?: string;
+  errorCode?: number;
 }
 
 export interface ExoProgressEvent {
@@ -27,13 +28,25 @@ export interface ExoProgressEvent {
 }
 
 interface ExoPlayerPlugin {
-  load(options: { url: string; title: string; artist: string; artwork?: string }): Promise<void>;
+  load(options: { url: string; title: string; artist: string; artwork?: string; id?: string }): Promise<void>;
+  addNextItem(options: { url: string; title: string; artist: string; artwork?: string; id: string }): Promise<void>;
   play(): Promise<void>;
   pause(): Promise<void>;
   seek(options: { seconds: number }): Promise<void>;
   stop(): Promise<void>;
   setVolume(options: { volume: number }): Promise<void>;
-  getCurrentState(): Promise<{ isPlaying: boolean; current: number; duration: number }>;
+  setRepeatMode(options: { mode: 'off' | 'one' | 'all' }): Promise<void>;
+  setShuffleMode(options: { enabled: boolean }): Promise<void>;
+  getRepeatMode(): Promise<{ mode: string }>;
+  getPlaybackState(): Promise<{ 
+    state: string; 
+    isPlaying: boolean; 
+    currentPosition: number; 
+    duration: number; 
+    mediaId?: string;
+    url?: string;
+    title?: string;
+  }>;
   addListener(
     eventName: 'onStateChange',
     listenerFunc: (data: ExoStateChangeEvent) => void
@@ -49,6 +62,10 @@ interface ExoPlayerPlugin {
   addListener(
     eventName: 'onNativePrevious',
     listenerFunc: () => void
+  ): Promise<PluginListenerHandle>;
+  addListener(
+    eventName: 'onNativeTrackChange',
+    listenerFunc: (data: { id: string }) => void
   ): Promise<PluginListenerHandle>;
 }
 
@@ -95,6 +112,32 @@ export class YouTubeExtractionService {
 
   public static isTauri(): boolean {
     return typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__ !== undefined;
+  }
+
+  /**
+   * Normalizes a URL for the current platform.
+   * On Android, converts file:// URIs to local-server URIs that the WebView can access.
+   */
+  static normalizeUrl(url?: string): string {
+    if (!url) return '';
+    if (this.isAndroid() && url.startsWith('file://')) {
+      try {
+        const { Capacitor } = (window as any);
+        if (Capacitor && Capacitor.convertFileSrc) {
+          return Capacitor.convertFileSrc(url);
+        }
+      } catch (e) {
+        console.warn('[YouTubeExtractionService] Failed to normalize native URL:', e);
+      }
+    }
+    return url;
+  }
+
+  /**
+   * Instance method for normalizeUrl (calls static version) 
+   */
+  normalizeUrl(url?: string): string {
+    return YouTubeExtractionService.normalizeUrl(url);
   }
 
   public static isCapacitor(): boolean {
