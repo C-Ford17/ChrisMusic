@@ -3,7 +3,7 @@
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/core/db/db';
-import { ChevronLeft, Play, X, Trash2 } from 'lucide-react';
+import { ChevronLeft, Play, Trash2 } from 'lucide-react';
 import Image from 'next/image';
 import { usePlayerStore } from '@/features/player/store/playerStore';
 import { LibraryService } from '@/features/library/services/libraryService';
@@ -64,7 +64,7 @@ function PlaylistContent() {
           entries.map((entry) => (
             <div 
               key={entry.id} 
-              className="group flex items-center justify-between p-3 rounded-xl hover:bg-white/5 transition-colors cursor-pointer" 
+              className="group flex items-center justify-between p-3 rounded-xl bg-black/20 hover:bg-white/10 transition-colors cursor-pointer" 
               onClick={() => playSongInQueue(entry.song as Song, entries.map(e => e.song as Song))}
             >
               <div className="flex items-center min-w-0 pr-4">
@@ -80,16 +80,15 @@ function PlaylistContent() {
                 </div>
               </div>
               
-              {/* Remove Song Action */}
               <button 
-                  className="text-gray-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity p-2"
+                  className="text-gray-500 hover:text-red-500 hover:bg-red-500/10 p-2 rounded-full transition-all"
                   onClick={(e) => {
                     e.stopPropagation();
                     LibraryService.removeSongFromPlaylist(entry.id!);
                   }}
                   title="Remove from Playlist"
                 >
-                  <X size={16} />
+                  <Trash2 size={18} />
               </button>
             </div>
           ))

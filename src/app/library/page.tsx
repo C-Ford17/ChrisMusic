@@ -169,6 +169,15 @@ export default function LibraryPage() {
                     <p className="text-black/40 dark:text-gray-400 text-xs font-medium truncate">{fav.song.artistName}</p>
                   </div>
                 </div>
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    LibraryService.removeFavorite(fav.id);
+                  }}
+                  className="p-3 text-black/20 dark:text-white/20 hover:text-red-500 hover:bg-red-500/10 rounded-full transition-all"
+                >
+                  <Trash2 size={18} />
+                </button>
               </div>
             ))
           )}

@@ -37,6 +37,10 @@ export const LibraryService = {
     return count > 0;
   },
 
+  async removeFavorite(songId: string): Promise<void> {
+    await db.favorites.delete(songId);
+  },
+
   // History (Saves play to IndexedDB)
   async recordPlay(song: Song): Promise<void> {
     try {
