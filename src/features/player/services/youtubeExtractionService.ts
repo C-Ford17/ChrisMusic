@@ -140,6 +140,15 @@ export class YouTubeExtractionService {
     return YouTubeExtractionService.normalizeUrl(url);
   }
 
+  /**
+   * Returns the highest resolution thumbnail possible for a YouTube video.
+   */
+  public static getHighResThumbnail(songId?: string, fallbackUrl?: string): string {
+    if (!songId) return fallbackUrl || '';
+    // YouTube has a predictable high-res URL pattern
+    return `https://i.ytimg.com/vi/${songId}/maxresdefault.jpg`;
+  }
+
   public static isCapacitor(): boolean {
     return Capacitor.isNativePlatform();
   }

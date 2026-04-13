@@ -12,28 +12,28 @@ export function BottomNav() {
       <div className="flex justify-around items-center h-16 sm:flex-col sm:h-full sm:justify-start sm:gap-2 sm:p-6 sm:items-start pt-2 sm:pt-10">
         <Link 
           href="/" 
-          className={`flex flex-col sm:flex-row items-center sm:items-center sm:justify-start w-full h-full sm:h-auto transition-all sm:px-4 sm:py-3 sm:rounded-xl ${pathname === '/' ? 'text-[#7C3AED] sm:bg-[#7C3AED]/10 font-bold' : 'text-gray-500 hover:text-black dark:hover:text-white sm:hover:bg-black/5 sm:dark:hover:bg-white/5 hover:scale-105 active:scale-95'}`}
+          className={`flex flex-col sm:flex-row items-center sm:items-center sm:justify-start w-full h-full sm:h-auto transition-all sm:px-4 sm:py-3 sm:rounded-xl ${pathname === '/' ? 'text-[var(--accent-primary)] sm:bg-[var(--accent-primary)]/10 font-bold' : 'text-gray-500 hover:text-[var(--accent-primary)] sm:hover:bg-[var(--accent-primary)]/10 hover:scale-105 active:scale-95'}`}
         >
           <HomeIcon size={24} className="sm:mr-4 shrink-0" />
           <span className="text-[10px] sm:text-sm mt-1 sm:mt-0 font-bold">Home</span>
         </Link>
         <Link 
           href="/search" 
-          className={`flex flex-col sm:flex-row items-center sm:items-center sm:justify-start w-full h-full sm:h-auto transition-all sm:px-4 sm:py-3 sm:rounded-xl ${pathname === '/search' ? 'text-[#7C3AED] sm:bg-[#7C3AED]/10 font-bold' : 'text-gray-500 hover:text-black dark:hover:text-white sm:hover:bg-black/5 sm:dark:hover:bg-white/5 hover:scale-105 active:scale-95'}`}
+          className={`flex flex-col sm:flex-row items-center sm:items-center sm:justify-start w-full h-full sm:h-auto transition-all sm:px-4 sm:py-3 sm:rounded-xl ${pathname.startsWith('/search') ? 'text-[var(--accent-primary)] sm:bg-[var(--accent-primary)]/10 font-bold' : 'text-gray-500 hover:text-[var(--accent-primary)] sm:hover:bg-[var(--accent-primary)]/10 hover:scale-105 active:scale-95'}`}
         >
           <Search size={24} className="sm:mr-4 shrink-0" />
           <span className="text-[10px] sm:text-sm mt-1 sm:mt-0 font-bold">Search</span>
         </Link>
         <Link 
           href="/library" 
-          className={`flex flex-col sm:flex-row items-center sm:items-center sm:justify-start w-full h-full sm:h-auto transition-all sm:px-4 sm:py-3 sm:rounded-xl ${pathname.startsWith('/library') ? 'text-[#7C3AED] sm:bg-[#7C3AED]/10 font-bold' : 'text-gray-500 hover:text-black dark:hover:text-white sm:hover:bg-black/5 sm:dark:hover:bg-white/5 hover:scale-105 active:scale-95'}`}
+          className={`flex flex-col sm:flex-row items-center sm:items-center sm:justify-start w-full h-full sm:h-auto transition-all sm:px-4 sm:py-3 sm:rounded-xl ${pathname.startsWith('/library') ? 'text-[var(--accent-primary)] sm:bg-[var(--accent-primary)]/10 font-bold' : 'text-gray-500 hover:text-[var(--accent-primary)] sm:hover:bg-[var(--accent-primary)]/10 hover:scale-105 active:scale-95'}`}
         >
           <Library size={24} className="sm:mr-4 shrink-0" />
           <span className="text-[10px] sm:text-sm mt-1 sm:mt-0 font-bold">Library</span>
         </Link>
         <Link 
           href="/settings" 
-          className={`flex flex-col sm:flex-row items-center sm:items-center sm:justify-start w-full h-full sm:h-auto transition-all sm:px-4 sm:py-3 sm:rounded-xl ${pathname === '/settings' ? 'text-[#7C3AED] sm:bg-[#7C3AED]/10 font-bold' : 'text-gray-500 hover:text-black dark:hover:text-white sm:hover:bg-black/5 sm:dark:hover:bg-white/5 hover:scale-105 active:scale-95'}`}
+          className={`flex flex-col sm:flex-row items-center sm:items-center sm:justify-start w-full h-full sm:h-auto transition-all sm:px-4 sm:py-3 sm:rounded-xl ${pathname.startsWith('/settings') ? 'text-[var(--accent-primary)] sm:bg-[var(--accent-primary)]/10 font-bold' : 'text-gray-500 hover:text-[var(--accent-primary)] sm:hover:bg-[var(--accent-primary)]/10 hover:scale-105 active:scale-95'}`}
         >
           <Settings size={24} className="sm:mr-4 shrink-0" />
           <span className="text-[10px] sm:text-sm mt-1 sm:mt-0 font-bold">Settings</span>

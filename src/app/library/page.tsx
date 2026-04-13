@@ -53,7 +53,7 @@ export default function LibraryPage() {
           <input 
             type="text" 
             placeholder={`Buscar en ${activeTab === 'playlists' ? 'playlists' : activeTab === 'favorites' ? 'favoritos' : activeTab === 'history' ? 'historial' : 'descargas'}...`}
-            className="w-full bg-black/[0.03] dark:bg-white/[0.05] border border-black/5 dark:border-white/10 rounded-2xl py-4 pl-14 pr-4 text-black dark:text-white placeholder:text-black/20 dark:placeholder:text-white/20 focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20 focus:bg-white dark:focus:bg-white/10 transition-all font-medium"
+            className="w-full bg-black/[0.03] dark:bg-white/[0.05] border border-black/5 dark:border-white/10 rounded-2xl py-4 pl-14 pr-4 text-black dark:text-white placeholder:text-black/20 dark:placeholder:text-white/20 focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)]/20 focus:bg-white dark:focus:bg-white/10 transition-all font-medium"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -73,32 +73,32 @@ export default function LibraryPage() {
       {/* Tabs */}
       <div className="flex border-b border-black/5 dark:border-white/10 mb-8 overflow-x-auto no-scrollbar scroll-smooth">
         <button 
-          className={`pb-4 px-6 text-[10px] whitespace-nowrap font-black uppercase tracking-[0.2em] transition-all relative ${activeTab === 'playlists' ? 'text-[#7C3AED]' : 'text-black/30 dark:text-gray-400 hover:text-black dark:hover:text-white'}`}
+          className={`pb-4 px-6 text-[10px] whitespace-nowrap font-black uppercase tracking-[0.2em] transition-all relative ${activeTab === 'playlists' ? 'text-[var(--accent-primary)]' : 'text-black/30 dark:text-gray-400 hover:text-black dark:hover:text-white'}`}
           onClick={() => setActiveTab('playlists')}
         >
           Mezclas
-          {activeTab === 'playlists' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#7C3AED] rounded-t-full shadow-[0_0_10px_rgba(124,58,237,0.5)]" />}
+          {activeTab === 'playlists' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-[var(--accent-primary)] rounded-t-full shadow-[0_0_10px_var(--accent-primary)]/50" />}
         </button>
         <button 
-          className={`pb-4 px-6 text-[10px] whitespace-nowrap font-black uppercase tracking-[0.2em] transition-all relative ${activeTab === 'favorites' ? 'text-[#7C3AED]' : 'text-black/30 dark:text-gray-400 hover:text-black dark:hover:text-white'}`}
+          className={`pb-4 px-6 text-[10px] whitespace-nowrap font-black uppercase tracking-[0.2em] transition-all relative ${activeTab === 'favorites' ? 'text-[var(--accent-primary)]' : 'text-black/30 dark:text-gray-400 hover:text-black dark:hover:text-white'}`}
           onClick={() => setActiveTab('favorites')}
         >
           Favoritos
-          {activeTab === 'favorites' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#7C3AED] rounded-t-full shadow-[0_0_10px_rgba(124,58,237,0.5)]" />}
+          {activeTab === 'favorites' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-[var(--accent-primary)] rounded-t-full shadow-[0_0_10px_var(--accent-primary)]/50" />}
         </button>
         <button 
-          className={`pb-4 px-6 text-[10px] whitespace-nowrap font-black uppercase tracking-[0.2em] transition-all relative ${activeTab === 'offline' ? 'text-[#7C3AED]' : 'text-black/30 dark:text-gray-400 hover:text-black dark:hover:text-white'}`}
+          className={`pb-4 px-6 text-[10px] whitespace-nowrap font-black uppercase tracking-[0.2em] transition-all relative ${activeTab === 'offline' ? 'text-[var(--accent-primary)]' : 'text-black/30 dark:text-gray-400 hover:text-black dark:hover:text-white'}`}
           onClick={() => setActiveTab('offline')}
         >
           Descargas
-          {activeTab === 'offline' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#7C3AED] rounded-t-full shadow-[0_0_10px_rgba(124,58,237,0.5)]" />}
+          {activeTab === 'offline' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-[var(--accent-primary)] rounded-t-full shadow-[0_0_10px_var(--accent-primary)]/50" />}
         </button>
         <button 
-          className={`pb-4 px-6 text-[10px] whitespace-nowrap font-black uppercase tracking-[0.2em] transition-all relative ${activeTab === 'history' ? 'text-[#7C3AED]' : 'text-black/30 dark:text-gray-400 hover:text-black dark:hover:text-white'}`}
+          className={`pb-4 px-6 text-[10px] whitespace-nowrap font-black uppercase tracking-[0.2em] transition-all relative ${activeTab === 'history' ? 'text-[var(--accent-primary)]' : 'text-black/30 dark:text-gray-400 hover:text-black dark:hover:text-white'}`}
           onClick={() => setActiveTab('history')}
         >
           Historia
-          {activeTab === 'history' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#7C3AED] rounded-t-full shadow-[0_0_10px_rgba(124,58,237,0.5)]" />}
+          {activeTab === 'history' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-[var(--accent-primary)] rounded-t-full shadow-[0_0_10px_var(--accent-primary)]/50" />}
         </button>
       </div>
 
@@ -108,17 +108,17 @@ export default function LibraryPage() {
           {/* Create Playlist Button */}
           <div 
             onClick={() => setIsModalOpen(true)}
-            className="aspect-square bg-black/[0.02] dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:bg-[#7C3AED]/5 hover:border-[#7C3AED]/20 transition-all group shadow-sm hover:shadow-xl"
+            className="aspect-square bg-black/[0.02] dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:bg-[var(--accent-primary)]/5 hover:border-[var(--accent-primary)]/20 transition-all group shadow-sm hover:shadow-xl"
           >
-            <div className="w-16 h-16 rounded-full bg-[#7C3AED] flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 group-hover:rotate-90 transition-all">
+            <div className="w-16 h-16 rounded-full bg-[var(--accent-primary)] flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 group-hover:rotate-90 transition-all">
               <Plus size={32} className="text-white" />
             </div>
-            <span className="font-black text-[10px] uppercase tracking-widest text-black/50 dark:text-gray-400 group-hover:text-[#7C3AED]">Nueva Mezcla</span>
+            <span className="font-black text-[10px] uppercase tracking-widest text-black/50 dark:text-gray-400 group-hover:text-[var(--accent-primary)]">Nueva Mezcla</span>
           </div>
 
           {/* Liked Songs Tile */}
           <div 
-            className="aspect-square bg-gradient-to-br from-purple-600 to-indigo-900 rounded-3xl p-6 flex flex-col justify-end cursor-pointer shadow-xl relative overflow-hidden group"
+            className="aspect-square bg-gradient-to-br from-[var(--accent-primary)] to-indigo-900 rounded-3xl p-6 flex flex-col justify-end cursor-pointer shadow-xl relative overflow-hidden group"
             onClick={() => setActiveTab('favorites')}
           >
             <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-all" />
@@ -130,8 +130,8 @@ export default function LibraryPage() {
           {/* User Playlists */}
           {filteredPlaylists.map((playlist) => (
             <Link href={`/library/playlist?id=${playlist.id}`} key={playlist.id}>
-              <div className="aspect-square bg-black/[0.02] dark:bg-white/5 rounded-3xl p-6 flex flex-col justify-end cursor-pointer hover:bg-white dark:hover:bg-white/10 transition-all relative overflow-hidden group border border-black/5 dark:border-white/10 hover:border-[#7C3AED]/30 shadow-sm hover:shadow-2xl">
-                <Music size={40} className="absolute top-6 right-6 opacity-[0.05] dark:opacity-20 text-black dark:text-white group-hover:scale-110 group-hover:text-[#7C3AED] group-hover:opacity-40 transition-all" />
+              <div className="aspect-square bg-black/[0.02] dark:bg-white/5 rounded-3xl p-6 flex flex-col justify-end cursor-pointer hover:bg-white dark:hover:bg-white/10 transition-all relative overflow-hidden group border border-black/5 dark:border-white/10 hover:border-[var(--accent-primary)]/30 shadow-sm hover:shadow-2xl">
+                <Music size={40} className="absolute top-6 right-6 opacity-[0.05] dark:opacity-20 text-black dark:text-white group-hover:scale-110 group-hover:text-[var(--accent-primary)] group-hover:opacity-40 transition-all" />
                 <h3 className="font-black relative z-10 text-lg text-black dark:text-white truncate tracking-tighter">{playlist.name}</h3>
                 <p className="text-black/30 dark:text-white/40 text-[10px] font-black relative z-10 mt-1 uppercase tracking-widest">Playlist</p>
               </div>
@@ -280,7 +280,7 @@ export default function LibraryPage() {
             <input 
               type="text" 
               placeholder="Nombre de la playlist" 
-              className="w-full bg-black/5 dark:bg-black/50 border border-black/5 dark:border-white/10 rounded-xl px-4 py-4 text-black dark:text-white mb-8 focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/50 transition-all placeholder:text-black/20 dark:placeholder:text-white/20"
+              className="w-full bg-black/5 dark:bg-black/50 border border-black/5 dark:border-white/10 rounded-xl px-4 py-4 text-black dark:text-white mb-8 focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)]/50 transition-all placeholder:text-black/20 dark:placeholder:text-white/20"
               value={newPlaylistName}
               onChange={(e) => setNewPlaylistName(e.target.value)}
               autoFocus
@@ -302,7 +302,7 @@ export default function LibraryPage() {
                   }
                 }}
                 disabled={!newPlaylistName.trim()}
-                className="flex-1 py-4 rounded-xl font-black bg-[#7C3AED] text-white hover:bg-violet-500 shadow-lg shadow-[#7C3AED]/20 disabled:opacity-50 transition-all text-sm uppercase tracking-widest"
+                className="flex-1 py-4 rounded-xl font-black bg-[var(--accent-primary)] text-white hover:brightness-110 shadow-lg shadow-[var(--accent-primary)]/20 disabled:opacity-50 transition-all text-sm uppercase tracking-widest"
               >
                 Crear
               </button>

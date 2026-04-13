@@ -4,7 +4,8 @@ import {
   ChevronLeft, Trash2, Download, Upload, 
   Info, ShieldCheck, Github, ExternalLink,
   Moon, Sun, Monitor, PlayCircle, Music2,
-  HardDrive, Sparkles, WifiOff, Bug, DatabaseZap
+  HardDrive, Sparkles, WifiOff, Bug, DatabaseZap,
+  Check
 } from 'lucide-react';
 import Link from 'next/link';
 import { LibraryService } from '@/features/library/services/libraryService';
@@ -26,7 +27,8 @@ export default function SettingsPage() {
     theme: storeTheme, setTheme: setStoreTheme, 
     autoplay, setAutoplay, audioQuality, setAudioQuality,
     isForcedOffline, setForcedOffline,
-    isDebugMode, setDebugMode
+    isDebugMode, setDebugMode,
+    accentColor, setAccentColor
   } = useSettingsStore();
   const { theme, setTheme } = useTheme();
 
@@ -178,8 +180,8 @@ export default function SettingsPage() {
   return (
     <main className="flex-1 p-6 pb-32 min-h-screen pt-safe max-w-2xl mx-auto transition-colors duration-500">
       <div className="flex items-center gap-4 mb-10">
-        <Link href="/library" className="p-3 bg-black/5 dark:bg-white/5 hover:bg-[#7C3AED]/10 rounded-2xl transition-all group shadow-sm">
-          <ChevronLeft size={24} className="text-black/60 dark:text-white/60 group-hover:text-[#7C3AED]" />
+        <Link href="/library" className="p-3 bg-black/5 dark:bg-white/5 hover:bg-[var(--accent-primary)]/10 rounded-2xl transition-all group shadow-sm">
+          <ChevronLeft size={24} className="text-black/60 dark:text-white/60 group-hover:text-[var(--accent-primary)]" />
         </Link>
         <h1 className="text-4xl font-black tracking-tighter text-black dark:text-white">Ajustes</h1>
       </div>
@@ -189,7 +191,7 @@ export default function SettingsPage() {
 
         {/* Apariencia */}
         <section className="animate-in fade-in slide-in-from-bottom-6 duration-500">
-          <h2 className="text-xs font-black text-[#7C3AED] uppercase tracking-[0.2em] mb-5 px-3 flex items-center gap-3">
+          <h2 className="text-xs font-black text-[var(--accent-primary)] uppercase tracking-[0.2em] mb-5 px-3 flex items-center gap-3">
             <Sparkles size={16} /> Personalización
           </h2>
           <div className="bg-black/5 dark:bg-white/5 rounded-[32px] p-8 border border-black/10 dark:border-white/10 space-y-8 shadow-sm">
@@ -218,8 +220,8 @@ export default function SettingsPage() {
                       }}
                       className={`flex flex-col items-center gap-2 py-4 rounded-[18px] transition-all ${
                         isActive 
-                        ? 'bg-[#7C3AED] text-white shadow-xl shadow-[#7C3AED]/20' 
-                        : 'text-black/30 dark:text-white/40 hover:text-[#7C3AED] dark:hover:text-white/60'
+                        ? 'bg-[var(--accent-primary)] text-white shadow-xl shadow-[var(--accent-primary)]/20' 
+                        : 'text-black/30 dark:text-white/40 hover:text-[var(--accent-primary)] dark:hover:text-white/60'
                       }`}
                     >
                       <Icon size={20} className={isActive ? "fill-current" : ""} />
@@ -227,6 +229,38 @@ export default function SettingsPage() {
                     </button>
                   );
                 })}
+              </div>
+            </div>
+
+            {/* Accent Color Palette */}
+            <div className="flex flex-col gap-6 pt-6 border-t border-black/5 dark:border-white/5">
+              <div>
+                <p className="font-black text-lg text-black/80 dark:text-white/90 tracking-tight">Color de acento</p>
+                <p className="text-xs font-bold text-black/30 dark:text-white/40 uppercase tracking-widest mt-1">Elige tu estilo</p>
+              </div>
+
+              <div className="flex flex-wrap gap-4">
+                {[
+                  { id: 'violet', color: '#7C3AED' },
+                  { id: 'green', color: '#1DB954' },
+                  { id: 'red', color: '#FF0000' },
+                  { id: 'blue', color: '#3B82F6' },
+                  { id: 'amber', color: '#F59E0B' },
+                  { id: 'pink', color: '#E11D48' },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => setAccentColor(item.color)}
+                    className={`w-12 h-12 rounded-2xl transition-all relative flex items-center justify-center ${
+                      accentColor === item.color ? 'scale-110 shadow-lg' : 'hover:scale-105 active:scale-90 opacity-60 hover:opacity-100'
+                    }`}
+                    style={{ backgroundColor: item.color }}
+                  >
+                    {accentColor === item.color && (
+                      <Check size={20} className="text-white drop-shadow-md" />
+                    )}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
@@ -251,7 +285,7 @@ export default function SettingsPage() {
                   <p className="text-sm font-bold text-black/30 dark:text-white/40 mt-0.5">Sugerir música al terminar</p>
                 </div>
               </div>
-              <div className={`w-14 h-7 rounded-full transition-all relative p-1 ${autoplay ? 'bg-[#7C3AED] shadow-inner shadow-black/20' : 'bg-black/10 dark:bg-white/10'}`}>
+              <div className={`w-14 h-7 rounded-full transition-all relative p-1 ${autoplay ? 'bg-[var(--accent-primary)] shadow-inner shadow-black/20' : 'bg-black/10 dark:bg-white/10'}`}>
                 <div className={`w-5 h-5 bg-white rounded-full shadow-lg transition-all transform ${autoplay ? 'translate-x-7' : 'translate-x-0'}`} />
               </div>
             </div>
@@ -274,7 +308,7 @@ export default function SettingsPage() {
                     className={`flex-1 py-4 px-5 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] border transition-all ${
                       audioQuality === q 
                       ? 'bg-white dark:bg-white text-black border-white shadow-xl scale-105 z-10' 
-                      : 'bg-black/5 dark:bg-transparent border-black/5 dark:border-white/10 text-black/30 dark:text-white/40 hover:border-[#7C3AED]/30'
+                      : 'bg-black/5 dark:bg-transparent border-black/5 dark:border-white/10 text-black/30 dark:text-white/40 hover:border-[var(--accent-primary)]/30'
                     }`}
                   >
                     {q === 'low' ? 'Baja' : q === 'normal' ? 'Media' : 'Alta'}
@@ -381,12 +415,12 @@ export default function SettingsPage() {
             <div>
               <p className="font-black text-lg text-black/80 dark:text-white/90 tracking-tight">Actualizar Cookies</p>
               <p className="text-sm font-bold text-black/30 dark:text-white/40 mt-1">
-                Pega aquí el contenido de tu <code className="bg-black/10 dark:bg-white/10 px-2 py-0.5 rounded text-[#7C3AED]">cookies.txt</code> para evitar bloqueos de YouTube.
+                Pega aquí el contenido de tu <code className="bg-black/10 dark:bg-white/10 px-2 py-0.5 rounded text-[var(--accent-primary)]">cookies.txt</code> para evitar bloqueos de YouTube.
               </p>
             </div>
             
             <textarea
-              className="w-full h-32 bg-black/5 dark:bg-black/40 border border-black/10 dark:border-white/10 rounded-2xl p-4 text-[10px] font-mono text-black/60 dark:text-white/60 focus:ring-2 focus:ring-[#7C3AED] outline-none transition-all resize-none"
+              className="w-full h-32 bg-black/5 dark:bg-black/40 border border-black/10 dark:border-white/10 rounded-2xl p-4 text-[10px] font-mono text-black/60 dark:text-white/60 focus:ring-2 focus:ring-[var(--accent-primary)] outline-none transition-all resize-none"
               placeholder="# Netscape HTTP Cookie File..."
               value={cookieText}
               onChange={(e) => setCookieText(e.target.value)}
@@ -405,7 +439,7 @@ export default function SettingsPage() {
               <button
                 onClick={handleSyncCookiesApi}
                 disabled={isSyncing}
-                className="flex-1 py-4 bg-[#7C3AED] text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:scale-[1.02] active:scale-95 transition-all shadow-lg shadow-[#7C3AED]/20 disabled:opacity-50"
+                className="flex-1 py-4 bg-[var(--accent-primary)] text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:scale-[1.02] active:scale-95 transition-all shadow-lg shadow-[var(--accent-primary)]/20 disabled:opacity-50"
               >
                 {isSyncing ? 'Sincronizando...' : 'Sincronizar con API'}
               </button>
@@ -419,7 +453,7 @@ export default function SettingsPage() {
 
         {/* Configuración Avanzada YouTube (PO Token) */}
         <section className="animate-in fade-in slide-in-from-bottom-10 duration-1000">
-          <h2 className="text-xs font-black text-[#7C3AED] uppercase tracking-[0.2em] mb-5 px-3 flex items-center gap-3">
+          <h2 className="text-xs font-black text-[var(--accent-primary)] uppercase tracking-[0.2em] mb-5 px-3 flex items-center gap-3">
             <ShieldCheck size={16} /> YouTube Independiente (Android)
           </h2>
           <div className="bg-black/5 dark:bg-white/5 rounded-[32px] overflow-hidden border border-black/10 dark:border-white/10 shadow-sm p-8 space-y-6">
@@ -435,7 +469,7 @@ export default function SettingsPage() {
                 <label className="text-[10px] font-black uppercase tracking-widest text-black/40 dark:text-white/40 mb-2 block px-1">PO Token</label>
                 <input
                   type="text"
-                  className="w-full bg-black/5 dark:bg-black/40 border border-black/10 dark:border-white/10 rounded-xl p-4 text-[10px] font-mono text-black/80 dark:text-white/80 focus:ring-2 focus:ring-[#7C3AED] outline-none"
+                  className="w-full bg-black/5 dark:bg-black/40 border border-black/10 dark:border-white/10 rounded-xl p-4 text-[10px] font-mono text-black/80 dark:text-white/80 focus:ring-2 focus:ring-[var(--accent-primary)] outline-none"
                   placeholder="PO_TOKEN..."
                   value={poToken}
                   onChange={(e) => setPoToken(e.target.value)}
@@ -446,7 +480,7 @@ export default function SettingsPage() {
                 <label className="text-[10px] font-black uppercase tracking-widest text-black/40 dark:text-white/40 mb-2 block px-1">Visitor Data</label>
                 <input
                   type="text"
-                  className="w-full bg-black/5 dark:bg-black/40 border border-black/10 dark:border-white/10 rounded-xl p-4 text-[10px] font-mono text-black/80 dark:text-white/80 focus:ring-2 focus:ring-[#7C3AED] outline-none"
+                  className="w-full bg-black/5 dark:bg-black/40 border border-black/10 dark:border-white/10 rounded-xl p-4 text-[10px] font-mono text-black/80 dark:text-white/80 focus:ring-2 focus:ring-[var(--accent-primary)] outline-none"
                   placeholder="VISITOR_DATA..."
                   value={visitorData}
                   onChange={(e) => setVisitorData(e.target.value)}
@@ -500,7 +534,7 @@ export default function SettingsPage() {
             className="w-full flex items-center justify-between p-8 hover:bg-white dark:hover:bg-white/2 transition-all text-left border-t border-black/5 dark:border-white/5 group"
           >
             <div className="flex items-center gap-5">
-              <div className="p-4 bg-[#7C3AED]/10 text-[#7C3AED] rounded-2xl group-hover:bg-[#7C3AED] group-hover:text-white transition-all">
+              <div className="p-4 bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] rounded-2xl group-hover:bg-[var(--accent-primary)] group-hover:text-white transition-all">
                 <DatabaseZap size={24} />
               </div>
               <div>
@@ -541,7 +575,7 @@ export default function SettingsPage() {
           <h2 className="text-xs font-black text-black/40 dark:text-white/20 uppercase tracking-[0.2em] mb-5 px-3">Información</h2>
           <div className="bg-black/5 dark:bg-white/5 rounded-[32px] overflow-hidden border border-black/10 dark:border-white/10 shadow-sm">
             <div className="p-8 flex items-center gap-5">
-              <div className="p-4 bg-purple-500/10 text-purple-600 dark:text-purple-400 rounded-2xl">
+              <div className="p-4 bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] rounded-2xl">
                 <Info size={24} />
               </div>
               <div>
@@ -564,7 +598,7 @@ export default function SettingsPage() {
                   <p className="text-sm font-bold text-black/30 dark:text-white/40 mt-0.5 tracking-tight">Código abierto colaborativo</p>
                 </div>
               </div>
-              <ExternalLink size={18} className="text-black/10 dark:text-white/10 group-hover:text-[#7C3AED] transition-all" />
+              <ExternalLink size={18} className="text-black/10 dark:text-white/10 group-hover:text-[var(--accent-primary)] transition-all" />
             </a>
 
             <div className="p-8 flex items-center gap-5 border-t border-black/5 dark:border-white/5">

@@ -63,7 +63,7 @@ export function VolumeControl({ className = "" }: { className?: string }) {
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                 />
                 <div className="w-full h-2 bg-black/5 dark:bg-white/10 rounded-full overflow-hidden">
-                  <div className="h-full bg-[#7C3AED] shadow-[0_0_8px_rgba(124,58,237,0.4)]" style={{ width: `${volume * 100}%` }} />
+                  <div className="h-full bg-[var(--accent-primary)] shadow-[0_0_8px_rgba(124,58,237,0.4)]" style={{ width: `${volume * 100}%` }} />
                 </div>
               </div>
               <span className="text-[10px] font-black text-black/40 dark:text-white/50 w-8">{Math.round(volume * 100)}%</span>
@@ -102,7 +102,7 @@ export function VolumeControl({ className = "" }: { className?: string }) {
           />
           <div className="w-full h-1.5 bg-black/5 dark:bg-white/10 rounded-full overflow-hidden flex items-center group-hover/slider:h-2 transition-all">
             <div 
-              className="h-full bg-[#7C3AED] transition-all"
+              className="h-full bg-[var(--accent-primary)] transition-all"
               style={{ width: `${volume * 100}%` }}
             />
           </div>

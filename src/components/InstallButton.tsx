@@ -45,7 +45,7 @@ export function InstallButton() {
   return (
     <button
       onClick={handleInstallClick}
-      className="w-full mb-6 bg-[#7C3AED] hover:bg-violet-500 text-white font-bold py-4 px-6 rounded-2xl flex items-center justify-center gap-3 transition-all shadow-lg active:scale-95"
+      className="w-full mb-6 bg-[var(--accent-primary)] hover:brightness-110 text-white font-bold py-4 px-6 rounded-2xl flex items-center justify-center gap-3 transition-all shadow-lg active:scale-95"
     >
       <Download size={20} />
       <span>Instalar ChrisMusic App</span>

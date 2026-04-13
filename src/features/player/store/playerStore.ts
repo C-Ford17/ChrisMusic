@@ -131,8 +131,8 @@ export const usePlayerStore = create<PlayerState>()(
       },
 
       playSong: async (song: Song, startSeconds: number = 0) => {
-        // Prevent double loading the same song if already buffering
-        if (get().currentSong?.id === song.id && get().isBuffering) {
+        // Prevent double loading the same song if already buffering, unless we need to reload (rehydration)
+        if (get().currentSong?.id === song.id && get().isBuffering && audioEngine.hasSource()) {
           console.log('[PlayerStore] Already buffering:', song.title);
           return;
         }
@@ -511,7 +511,8 @@ export const usePlayerStore = create<PlayerState>()(
           isNowPlayingOpen: false
         });
       },
-    }),
+
+      }),
     {
       name: 'chrismusic-player-storage',
       storage: createJSONStorage(() => localStorage),
@@ -597,9 +598,16 @@ export const initPlayerStoreSync = () => {
   // 3. Sync Progress and Duration
   // (The plugin already sends onProgress events which AudioEngine handles internally)
   audioEngine.onProgress = (data) => {
+    const currentState = usePlayerStore.getState();
+    
+    // Evitar que el progreso retroceda por micro-errores del reproductor nativo, a menos que sea un salto grande (ej. usando la barra) o empiece de nuevo
+    if (data.current < currentState.progress && (currentState.progress - data.current) < 1.0) {
+      return; // Ignorar si es un retroceso menor a 1 segundo (bug de micro-stutter)
+    }
+
     usePlayerStore.setState({
-      progress: Math.floor(data.current),
-      duration: Math.floor(data.duration)
+      progress: data.current, // Usar precisión decimal para las letras
+      duration: data.duration > 0 ? data.duration : currentState.duration
     });
   };
 
@@ -615,4 +623,21 @@ export const initPlayerStoreSync = () => {
       await usePlayerStore.getState().playSong(currentSong, progress);
     }
   });
+};
+
+export const initializePlayerSession = async () => {
+  const state = usePlayerStore.getState();
+  if (state.currentSong && state.progress > 0) {
+    console.log('[PlayerStore] Initializing session, loading song (paused):', state.currentSong.title);
+    
+    // Try offline first, then cache, then YouTube
+    const { song: resolvedSong, audioUrl } = await offlineService.resolveOfflineSong(state.currentSong);
+    
+    if (audioUrl) {
+      console.log('[PlayerStore] Source: Offline/Cache');
+      await audioEngine.loadSong(resolvedSong, state.progress, false, audioUrl);
+    } else {
+      await audioEngine.loadSong(state.currentSong, state.progress, false);
+    }
+  }
 };

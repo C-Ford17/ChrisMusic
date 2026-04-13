@@ -41,7 +41,7 @@ export default function Home() {
     <div className="flex flex-col min-h-screen pt-safe">
       <main className="flex-1 p-6 pb-32 max-w-5xl mx-auto w-full">
         {/* Header Section */}
-        <section className="mt-10 mb-16 relative overflow-hidden rounded-[40px] bg-linear-to-br from-[#7C3AED] via-[#6D28D9] to-black p-10 md:p-14 text-white shadow-2xl shadow-[#7C3AED]/20 group">
+        <section className="mt-10 mb-16 relative overflow-hidden rounded-[40px] bg-linear-to-br from-[var(--accent-primary)] to-black p-10 md:p-14 text-white shadow-2xl shadow-[var(--accent-primary)]/20 group">
           <div className="relative z-10 space-y-4">
             <div className="flex items-center gap-3">
               <span className="px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-[10px] font-black uppercase tracking-[0.2em]">ChrisMusic Premium</span>
@@ -57,7 +57,7 @@ export default function Home() {
           </div>
           {/* Decorative shapes */}
           <div className="absolute -top-10 -right-10 w-64 h-64 bg-white/10 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-1000" />
-          <div className="absolute -bottom-20 -left-20 w-80 h-80 bg-[#7C3AED]/30 rounded-full blur-3xl" />
+          <div className="absolute -bottom-20 -left-20 w-80 h-80 bg-[var(--accent-primary)]/30 rounded-full blur-3xl" />
         </section>
 
         {/* Recently Played */}
@@ -80,7 +80,7 @@ export default function Home() {
 
           {!recentHistory || recentHistory.length === 0 ? (
             <div className="bg-black/5 dark:bg-white/5 rounded-[32px] p-20 text-center space-y-6 border border-dashed border-black/10 dark:border-white/10">
-              <div className="w-20 h-20 bg-[#7C3AED]/10 text-[#7C3AED] rounded-full flex items-center justify-center mx-auto">
+              <div className="w-20 h-20 bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] rounded-full flex items-center justify-center mx-auto">
                 <Play size={32} strokeWidth={3} fill="currentColor" />
               </div>
               <div className="space-y-2">
@@ -122,7 +122,7 @@ export default function Home() {
                       <Image src={YouTubeExtractionService.normalizeUrl(item.song.thumbnailUrl)} alt={item.song.title} fill sizes="56px" className="object-cover group-hover:scale-110 transition-transform duration-500" />
                     </div>
                     <div className="flex-1 min-w-0 mr-4 text-left">
-                      <h3 className="text-black dark:text-white font-black truncate group-hover:text-[#7C3AED] transition-colors tracking-tight text-lg">{item.song.title}</h3>
+                      <h3 className="text-black dark:text-white font-black truncate group-hover:text-[var(--accent-primary)] transition-colors tracking-tight text-lg">{item.song.title}</h3>
                       <p className="text-gray-500 dark:text-gray-400 text-xs font-bold truncate mt-1 uppercase tracking-wider">{item.song.artistName}</p>
                     </div>
                     <div className="flex gap-2 shrink-0">
@@ -142,7 +142,7 @@ export default function Home() {
                           setSelectedSong(item.song as Song);
                           setIsModalOpen(true);
                         }}
-                        className="w-10 h-10 flex items-center justify-center bg-black/5 dark:bg-white/5 text-gray-400 hover:text-[#7C3AED] hover:bg-[#7C3AED]/10 rounded-xl transition-all"
+                        className="w-10 h-10 flex items-center justify-center bg-black/5 dark:bg-white/5 text-gray-400 hover:text-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/10 rounded-xl transition-all"
                         title="Añadir a playlist"
                       >
                         <ListPlus size={20} />

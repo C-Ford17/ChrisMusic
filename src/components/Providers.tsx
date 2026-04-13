@@ -7,7 +7,7 @@ import { BottomNav } from "@/shared/components/BottomNav";
 import { YouTubePlayer } from "@/features/player/components/YouTubePlayer";
 import { OfflineDetector } from "@/components/OfflineDetector";
 
-import { usePlayerStore, initPlayerStoreSync } from "@/features/player/store/playerStore";
+import { usePlayerStore, initPlayerStoreSync, initializePlayerSession } from "@/features/player/store/playerStore";
 import { useEffect } from "react";
 import { audioEngine } from "@/features/player/services/audioEngine";
 import { AppEvents } from './AppEvents';
@@ -16,6 +16,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Global sync between native engine and store
     initPlayerStoreSync();
+
+    // Initialize session from persisted state (after sync is ready)
+    setTimeout(() => {
+      initializePlayerSession();
+    }, 100);
 
     // MediaSession initialization
     audioEngine.setMediaSessionActions({

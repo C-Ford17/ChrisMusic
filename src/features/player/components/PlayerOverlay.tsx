@@ -6,7 +6,7 @@ import { audioEngine } from '../services/audioEngine';
 import { 
   Play, Pause, SkipForward, SkipBack, Shuffle, Heart, 
   ChevronDown, ListMusic, Repeat, Repeat1, Plus, X, Mic2,
-  Download, Check, Loader2
+  Download, Check, Loader2, Timer
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -39,7 +39,10 @@ export function PlayerOverlay() {
     syncState
   } = usePlayerStore();
 
-  const { isDebugMode } = useSettingsStore();
+  const { isDebugMode, isShutdownTimerActive, shutdownTimerEndsAt, startShutdownTimer, cancelShutdownTimer } = useSettingsStore();
+
+  const [showTimerModal, setShowTimerModal] = useState(false);
+  const [timerRemaining, setTimerRemaining] = useState<number | null>(null);
 
   const [showQueue, setShowQueue] = useState(false);
 
@@ -50,6 +53,37 @@ export function PlayerOverlay() {
 
     return () => clearInterval(interval);
   }, [syncState]);
+
+  useEffect(() => {
+    if (!isShutdownTimerActive || !shutdownTimerEndsAt) {
+      setTimerRemaining(null);
+      return;
+    }
+
+    const updateTimer = () => {
+      const remaining = Math.max(0, shutdownTimerEndsAt - Date.now());
+      setTimerRemaining(remaining);
+
+      if (remaining <= 0) {
+        cancelShutdownTimer();
+        usePlayerStore.getState().pause();
+        import('@capacitor/app').then(({ App }) => {
+          App.exitApp();
+        }).catch(() => {
+          const win = window as any;
+          if (win.Cordova?.exitApp) {
+            win.Cordova.exitApp();
+          } else {
+            win.close?.();
+          }
+        });
+      }
+    };
+
+    updateTimer();
+    const timerInterval = setInterval(updateTimer, 1000);
+    return () => clearInterval(timerInterval);
+  }, [isShutdownTimerActive, shutdownTimerEndsAt, cancelShutdownTimer]);
 
   const isFavorite = useLiveQuery(
     () => db.favorites.where('id').equals(currentSong?.id || '').count(),
@@ -174,7 +208,7 @@ export function PlayerOverlay() {
             onTouchEnd={handleMiniTouchEnd}
           >
             <div 
-              className="absolute left-0 top-0 bottom-0 bg-[#7C3AED]/5 pointer-events-none z-0 transition-all duration-300" 
+              className="absolute left-0 top-0 bottom-0 bg-[var(--accent-primary)]/5 pointer-events-none z-0 transition-all duration-300" 
               style={{ width: `${progressPercent}%` }} 
             />
 
@@ -196,7 +230,7 @@ export function PlayerOverlay() {
             
             <div className="hidden sm:flex flex-1 flex-col justify-center items-center gap-2 max-w-2xl mx-auto px-4" onClick={(e) => e.stopPropagation()}>
                <div className="flex items-center gap-8">
-                 <button onClick={playPrevious} className="text-gray-400 hover:text-[#7C3AED] transition-all active:scale-90"><SkipBack size={22} fill="currentColor" /></button>
+                 <button onClick={playPrevious} className="text-gray-400 hover:text-[var(--accent-primary)] transition-all active:scale-90"><SkipBack size={22} fill="currentColor" /></button>
                  <button 
                     onClick={togglePlayPause}
                     className="w-11 h-11 bg-black dark:bg-white rounded-full flex items-center justify-center text-white dark:text-black hover:scale-110 active:scale-90 transition-all shadow-lg"
@@ -205,7 +239,7 @@ export function PlayerOverlay() {
                       ? <Loader2 size={20} className="animate-spin" />
                       : isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" className="ml-1" />}
                  </button>
-                 <button onClick={() => playNext()} className="text-gray-400 hover:text-[#7C3AED] transition-all active:scale-90"><SkipForward size={22} fill="currentColor" /></button>
+                 <button onClick={() => playNext()} className="text-gray-400 hover:text-[var(--accent-primary)] transition-all active:scale-90"><SkipForward size={22} fill="currentColor" /></button>
                </div>
                
                <div className="w-full flex items-center gap-3 text-[11px] text-gray-400 font-bold tracking-tighter group">
@@ -219,7 +253,7 @@ export function PlayerOverlay() {
                      onChange={(e) => seekTo(Number(e.target.value))}
                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                    />
-                   <div className="h-full bg-[#7C3AED] rounded-full transition-all pointer-events-none shadow-[0_0_10px_rgba(124,58,237,0.3)]" style={{ width: `${progressPercent}%` }} />
+                   <div className="h-full bg-[var(--accent-primary)] rounded-full transition-all pointer-events-none shadow-[0_0_10px_rgba(124,58,237,0.3)]" style={{ width: `${progressPercent}%` }} />
                  </div>
                  <span className="w-10">{formatTime(duration)}</span>
                </div>
@@ -229,18 +263,18 @@ export function PlayerOverlay() {
                 <div className="hidden lg:flex items-center gap-4 bg-black/2 dark:bg-white/3 border border-black/5 dark:border-white/5 p-3 rounded-2xl">
                   <VolumeControl />
                 </div>
-                <button onClick={handleToggleFavorite} className="p-3 bg-black/5 dark:bg-white/5 hover:bg-[#7C3AED]/10 rounded-xl transition-all group">
-                    <Heart size={20} fill={isFavorite ? "#7C3AED" : "none"} className={isFavorite ? "text-[#7C3AED]" : "text-gray-400 group-hover:text-black dark:group-hover:text-white"} />
+                <button onClick={handleToggleFavorite} className="p-3 bg-black/5 dark:bg-white/5 hover:bg-[var(--accent-primary)]/10 rounded-xl transition-all group">
+                    <Heart size={20} fill={isFavorite ? "var(--accent-primary)" : "none"} className={isFavorite ? "text-[var(--accent-primary)]" : "text-gray-400 group-hover:text-black dark:group-hover:text-white"} />
                 </button>
                 <button 
                   onClick={(e) => { e.stopPropagation(); toggleDownload(currentSong); }}
                   disabled={isDownloading}
                   className={`p-3 rounded-xl transition-all group ${
                     isDownloaded 
-                      ? 'bg-[#7C3AED]/10 text-[#7C3AED]' 
+                      ? 'bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]' 
                       : isDownloading 
                         ? 'bg-black/5 dark:bg-white/5 text-gray-400'
-                        : 'bg-black/5 dark:bg-white/5 hover:bg-[#7C3AED]/10 text-gray-400 group-hover:text-black dark:group-hover:text-white'
+                        : 'bg-black/5 dark:bg-white/5 hover:bg-[var(--accent-primary)]/10 text-gray-400 group-hover:text-black dark:group-hover:text-white'
                   }`}
                 >
                   {isDownloading ? <Loader2 size={20} className="animate-spin" /> : isDownloaded ? <Check size={20} /> : <Download size={20} />}
@@ -266,245 +300,172 @@ export function PlayerOverlay() {
             animate={{ y: '0%' }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="fixed inset-0 z-100 bg-white dark:bg-[#0A0A0A] sm:bg-white/95 sm:dark:bg-[#0A0A0A]/95 sm:backdrop-blur-3xl flex justify-center overflow-hidden transition-colors duration-500"
+            className="fixed inset-0 z-100 bg-black flex justify-center overflow-hidden"
           >
-            <div className="w-full h-full flex flex-col xl:max-w-7xl xl:px-8">
-              <div className="flex items-center justify-between p-4 pb-0 pt-6">
-                <button onClick={() => setIsNowPlayingOpen(false)} className="p-2 -ml-2 text-black/40 dark:text-white/70 hover:text-black dark:hover:text-white transition-colors"><ChevronDown size={32} /></button>
-                <span className="text-[10px] font-black tracking-[0.3em] text-[#7C3AED] uppercase">Ahora Suena</span>
-                <div className="w-10" />
+            {/* Fondo Inmersivo: Imagen Completa Sharp/Blur */}
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={currentSong.id}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 1 }}
+                className="absolute inset-0 z-0 overflow-hidden"
+              >
+                <div className="absolute inset-0 bg-black z-0" />
+                <motion.div
+                  animate={{ 
+                    filter: showLyrics ? 'blur(10px) brightness(0.4)' : 'blur(0px) brightness(0.6)',
+                    scale: showLyrics ? 1.05 : 1
+                  }}
+                  className="absolute inset-0 transition-all duration-1000"
+                >
+                  <Image 
+                    src={YouTubeExtractionService.getHighResThumbnail(currentSong.id, YouTubeExtractionService.normalizeUrl(currentSong.thumbnailUrl))}
+                    alt="" 
+                    fill 
+                    className="object-cover object-center"
+                    priority
+                  />
+                </motion.div>
+                {/* Degradados de legibilidad: Muy suaves */}
+                <div className="absolute inset-0 bg-linear-to-b from-black/30 via-transparent to-black/60 z-10" />
+              </motion.div>
+            </AnimatePresence>
+
+            {/* Contenido UI */}
+            <div className="w-full h-full flex flex-col relative z-20">
+              
+              {/* Header: Totalmente transparente */}
+              <div className="flex items-center justify-between p-6 px-8 pt-safe">
+                <button onClick={() => setIsNowPlayingOpen(false)} className="p-2 -ml-2 text-white/70 hover:text-white transition-colors"><ChevronDown size={32} /></button>
+                <span className="text-[10px] font-black tracking-[0.4em] text-white/90 uppercase drop-shadow-lg">Reproduciendo</span>
+                <button onClick={() => setShowTimerModal(true)} className={`p-2 rounded-xl transition-all ${isShutdownTimerActive ? 'bg-[var(--accent-primary)]/40 text-white' : 'text-white/70 hover:text-white'}`}>
+                  <Timer size={24} />
+                </button>
               </div>
 
-              <div className="flex-1 flex flex-col md:flex-row gap-6 md:gap-16 px-4 md:px-0 py-2 sm:py-6 overflow-hidden items-center md:items-start relative">
+              <div className="flex-1 flex flex-col px-4 md:px-0 py-2 sm:py-6 overflow-hidden relative">
                 
-                <div className="flex-1 flex flex-col w-full max-w-[400px] md:max-w-none md:justify-center h-full min-h-0">
-                  <div className={`w-full ${showLyrics || (showQueue) ? 'h-full flex-1' : 'aspect-square max-w-[500px] mx-auto'} bg-gradient-to-br from-[#7C3AED] to-black/20 dark:to-black rounded-3xl relative shadow-2xl overflow-hidden mb-4 sm:mb-8 group flex items-center justify-center border border-black/5 dark:border-white/5 transition-all duration-300`}>
+                {/* Contenido Central: Letras o Espacio para Fondo Sharp */}
+                <div className="flex-1 flex flex-col w-full h-full min-h-0 relative z-20">
                     <AnimatePresence mode="wait">
-                      {showQueue ? (
-                        <motion.div key="queue-central" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-20">
-                          <div className="md:hidden h-full w-full bg-white dark:bg-[#0A0A0A] p-6 flex flex-col">
-                            <div className="flex justify-between items-center mb-6 shrink-0">
-                              <h3 className="font-black text-xl text-black dark:text-white flex items-center gap-3 tracking-tighter"><ListMusic className="text-[#7C3AED]" size={24} /> Siguiente</h3>
-                              <button onClick={() => setShowQueue(false)} className="p-2 bg-black/5 dark:bg-white/5 rounded-xl text-black/40 dark:text-white/50 hover:text-red-500 transition-colors"><X size={18} /></button>
-                            </div>
-                            <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar pb-safe">
-                              {queue.map((song, idx) => (
-                                <div key={`${song.id}-${idx}`} className={`flex items-center justify-between p-3 rounded-xl transition-all ${currentSong.id === song.id ? 'bg-[#7C3AED]/10' : 'bg-black/2 dark:bg-white/2 hover:bg-black/5 dark:hover:bg-white/5'}`} onClick={() => playFromQueue(idx)}>
-                                  <div className="flex items-center min-w-0">
-                                    <div className="relative w-10 h-10 mr-3 shrink-0 bg-gray-200 dark:bg-black rounded-lg overflow-hidden shadow-sm">
-                                      <Image src={YouTubeExtractionService.normalizeUrl(song.thumbnailUrl)} alt={song.title} fill sizes="40px" className="object-cover" />
-                                    </div>
-                                    <div className="min-w-0">
-                                      <h4 className={`text-[11px] font-bold truncate ${currentSong.id === song.id ? 'text-[#7C3AED]' : 'text-black dark:text-white'}`}>{song.title}</h4>
-                                      <p className="text-black/40 dark:text-white/40 text-[9px] truncate font-bold">{song.artistName}</p>
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                          <div className="hidden md:block h-full w-full relative">
-                            {showLyrics ? (
-                              <LyricsPanel />
-                            ) : (
-                              <>
-                                <Image 
-                                  src={YouTubeExtractionService.normalizeUrl(currentSong.thumbnailUrl)} 
-                                  alt={currentSong.title} 
-                                  fill 
-                                  sizes="(min-width: 768px) 500px, 100vw" 
-                                  className="object-cover opacity-90 transition-transform duration-700 group-hover:scale-110" 
-                                />
-                                <div className="absolute inset-0 bg-linear-to-t from-black/20 to-transparent" />
-                              </>
-                            )}
-                          </div>
-                        </motion.div>
-                      ) : showLyrics ? (
-                        <motion.div key="lyrics" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-10 bg-white/40 dark:bg-black/40 backdrop-blur-md">
+                      {showLyrics ? (
+                        <motion.div key="lyrics" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="absolute inset-0 z-30 pt-4">
                           <LyricsPanel />
                         </motion.div>
-                      ) : (
-                        <motion.div key="art" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0">
-                          <Image src={YouTubeExtractionService.normalizeUrl(currentSong.thumbnailUrl)} alt={currentSong.title} fill sizes="(min-width: 768px) 500px, 100vw" className="object-cover opacity-90 transition-transform duration-700 group-hover:scale-110" />
-                          <div className="absolute inset-0 bg-linear-to-t from-black/20 to-transparent" />
-                        </motion.div>
-                      )}
+                      ) : null}
                     </AnimatePresence>
-                  </div>
-
-                  <div className="hidden md:block w-full max-w-2xl mx-auto">
-                    <div className="flex justify-between items-center mb-6">
-                      <div className="flex-1 min-w-0 pr-4">
-                        <h2 className="text-3xl lg:text-4xl font-black text-black dark:text-white overflow-hidden tracking-tight">
-                          <MarqueeText text={currentSong.title} />
-                        </h2>
-                        <p className="text-lg lg:text-xl text-black/50 dark:text-white/50 font-bold truncate mt-1">{currentSong.artistName}</p>
-                      </div>
-                      <div className="flex gap-4">
-                        <button onClick={handleToggleFavorite} className="p-3 rounded-2xl bg-black/5 dark:bg-white/5 hover:bg-[#7C3AED]/10 transition-all"><Heart size={28} fill={isFavorite ? "#7C3AED" : "none"} className={isFavorite ? "text-[#7C3AED]" : "text-black/40 dark:text-white/40"} /></button>
-                        <button onClick={() => setIsPlaylistModalOpen(true)} className="p-3 rounded-2xl bg-black/5 dark:bg-white/5 hover:bg-[#7C3AED]/10 text-black/40 dark:text-white/40 transition-all"><Plus size={28} /></button>
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); toggleDownload(currentSong); }}
-                          disabled={isDownloading}
-                          className={`p-3 rounded-2xl transition-all ${
-                            isDownloaded 
-                              ? 'bg-[#7C3AED]/10 text-[#7C3AED]' 
-                              : isDownloading 
-                                ? 'bg-black/5 dark:bg-white/5 text-gray-400'
-                                : 'bg-black/5 dark:bg-white/5 hover:bg-[#7C3AED]/10 text-black/40 dark:text-white/40'
-                          }`}
-                        >
-                          {isDownloading ? <Loader2 size={28} className="animate-spin" /> : isDownloaded ? <Check size={28} /> : <Download size={28} />}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="mb-8 relative group/progress">
-                      <input
-                        type="range" min="0" max={duration || 100} value={progress || 0}
-                        onChange={(e) => seekTo(Number(e.target.value))}
-                        className="absolute inset-0 w-full h-4 -top-1.5 opacity-0 cursor-pointer z-10"
-                      />
-                      <div className="h-2 w-full bg-black/5 dark:bg-white/10 rounded-full overflow-hidden relative pointer-events-none transition-all">
-                        <div className="h-full bg-[#7C3AED] rounded-full absolute top-0 left-0 shadow-[0_0_15px_rgba(124,58,237,0.5)]" style={{ width: `${progressPercent}%` }} />
-                      </div>
-                      <div className="flex justify-between text-[11px] text-black/30 dark:text-white/40 mt-4 font-black uppercase tracking-widest">
-                        <span>{formatTime(progress)}</span>
-                        <span>{formatTime(duration)}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between mt-4">
-                      <div className="w-1/4 flex justify-start"><VolumeControl /></div>
-                      <div className="flex items-center gap-10">
-                        <button onClick={toggleShuffle} className={`transition-all hover:scale-110 ${isShuffle ? 'text-[#7C3AED]' : 'text-black/20 dark:text-white/40 hover:text-black dark:hover:text-white'}`}><Shuffle size={24} /></button>
-                        <button onClick={playPrevious} className="text-black dark:text-white hover:text-[#7C3AED] transition-all"><SkipBack size={36} fill="currentColor" /></button>
-                        <button onClick={togglePlayPause} className="w-20 h-20 bg-black dark:bg-white text-white dark:text-black rounded-full flex items-center justify-center shadow-2xl hover:scale-110 active:scale-90 transition-all">
-                          {isBuffering 
-                            ? <Loader2 size={32} className="animate-spin" />
-                            : isPlaying ? <Pause size={32} fill="currentColor" /> : <Play size={32} fill="currentColor" className="ml-1" />
-                          }
-                        </button>
-                        <button onClick={() => playNext()} className="text-black dark:text-white hover:text-[#7C3AED] transition-all"><SkipForward size={36} fill="currentColor" /></button>
-                        <button onClick={toggleRepeatMode} className={`transition-all hover:scale-110 ${repeatMode !== 'off' ? 'text-[#7C3AED]' : 'text-black/20 dark:text-white/40 hover:text-black dark:hover:text-white'}`}>
-                          {repeatMode === 'one' ? <Repeat1 size={24} /> : <Repeat size={24} />}
-                        </button>
-                      </div>
-                      <div className="w-1/4 flex justify-end items-center gap-3">
-                        <button onClick={() => setShowLyrics(!showLyrics)} className={`p-3 rounded-2xl transition-all ${showLyrics ? 'bg-[#7C3AED]/20 text-[#7C3AED]' : 'bg-black/5 dark:bg-white/5 text-black/40 dark:text-white/40 hover:text-black dark:hover:text-white'}`}><Mic2 size={24} /></button>
-                        <button onClick={() => setShowQueue(!showQueue)} className={`p-3 rounded-2xl transition-all ${showQueue ? 'bg-[#7C3AED]/20 text-[#7C3AED]' : 'bg-black/5 dark:bg-white/5 text-black/40 dark:text-white/40 hover:text-black dark:hover:text-white'}`}><ListMusic size={24} /></button>
-                      </div>
-                    </div>
-                  </div>
                 </div>
+
+                {/* Panel de Controles Multifila Estilo RiMusic */}
+                <motion.div 
+                  className={`w-full max-w-2xl mx-auto flex flex-col px-8 mt-auto pb-safe transition-all duration-500 ${showLyrics ? 'gap-4 pb-4 sm:pb-6' : 'gap-6 sm:gap-8 pb-10 sm:pb-16'}`}
+                >
+                  
+                  {/* Fila 1: Metadatos y Acciones Básicas */}
+                  <div className="flex items-end justify-between gap-4">
+                    <div className="flex-1 min-w-0 pr-2">
+                      <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tighter leading-tight drop-shadow-2xl">
+                        <MarqueeText text={currentSong.title} />
+                      </h2>
+                      <p className="text-lg sm:text-2xl text-[var(--accent-primary)] font-bold truncate mt-1 drop-shadow-md brightness-150">{currentSong.artistName}</p>
+                    </div>
+                    <div className="flex items-center shrink-0">
+                      <button onClick={handleToggleFavorite} className="p-2 transition-all active:scale-90"><Heart size={28} fill={isFavorite ? "var(--accent-primary)" : "none"} className={isFavorite ? "text-[var(--accent-primary)] drop-shadow-md" : "text-white/70 hover:text-white"} /></button>
+                    </div>
+                  </div>
+
+                  {/* Fila 2: Barra de Progreso */}
+                  <div className="relative group/progress">
+                    <input
+                      type="range" min="0" max={duration || 100} value={progress || 0}
+                      onChange={(e) => seekTo(Number(e.target.value))}
+                      className="absolute inset-x-0 w-full h-10 -top-4 opacity-0 cursor-pointer z-50"
+                    />
+                    <div className="h-2.5 w-full bg-white/10 rounded-full overflow-hidden relative pointer-events-none backdrop-blur-sm">
+                      <div className="h-full bg-[var(--accent-primary)] rounded-full absolute top-0 left-0 shadow-[0_0_20px_var(--accent-primary)]" style={{ width: `${progressPercent}%` }} />
+                    </div>
+                    <div className="flex justify-between text-[11px] text-white/40 mt-3 font-bold uppercase tracking-widest ">
+                      <span>{formatTime(progress)}</span>
+                      <span>{formatTime(duration)}</span>
+                    </div>
+                  </div>
+
+                  {/* Fila 3: Controles Principales Hero */}
+                  <div className="flex items-center justify-center py-1">
+                    <div className="flex items-center gap-8 sm:gap-14">
+                      <button onClick={playPrevious} className="text-white hover:text-[var(--accent-primary)] transition-all transform active:scale-75"><SkipBack size={44} fill="currentColor" /></button>
+                      <button onClick={togglePlayPause} className={`bg-white text-black rounded-full flex items-center justify-center shadow-2xl hover:scale-105 active:scale-90 transition-all ${showLyrics ? 'w-20 h-20' : 'w-24 h-24 sm:w-28 sm:h-28'}`}>
+                        {isBuffering 
+                          ? <Loader2 size={36} className="animate-spin" />
+                          : isPlaying ? <Pause size={showLyrics ? 32 : 40} fill="currentColor" /> : <Play size={showLyrics ? 32 : 40} fill="currentColor" className="ml-1.5" />
+                        }
+                      </button>
+                      <button onClick={() => playNext()} className="text-white hover:text-[var(--accent-primary)] transition-all transform active:scale-75"><SkipForward size={44} fill="currentColor" /></button>
+                    </div>
+                  </div>
+
+                  {/* Fila 4: Utilidades (Shuffle, Add, Mic, Queue, Download, Repeat) */}
+                  <div className="flex items-center justify-between pt-1 w-full px-1">
+                     <button onClick={toggleShuffle} className={`transition-all hover:scale-110 p-2 ${isShuffle ? 'text-[var(--accent-primary)] drop-shadow-md' : 'text-white/50 hover:text-white'}`}><Shuffle size={22} /></button>
+                     
+                     <button onClick={() => setIsPlaylistModalOpen(true)} className="p-2 transition-all hover:scale-110 text-white/50 hover:text-white">
+                        <Plus size={24} />
+                     </button>
+
+                     <button onClick={() => setShowLyrics(!showLyrics)} className={`transition-all hover:scale-110 p-2 ${showLyrics ? 'text-[var(--accent-primary)] drop-shadow-md' : 'text-white/50 hover:text-white'}`}>
+                       <Mic2 size={24} />
+                     </button>
+
+                     <button onClick={() => setShowQueue(!showQueue)} className={`transition-all hover:scale-110 p-2 ${showQueue ? 'text-[var(--accent-primary)] drop-shadow-md' : 'text-white/50 hover:text-white'}`}>
+                       <ListMusic size={24} />
+                     </button>
+
+                     <button 
+                         onClick={(e) => { e.stopPropagation(); toggleDownload(currentSong); }}
+                         disabled={isDownloading}
+                         className={`p-2 transition-all hover:scale-110 ${isDownloaded ? 'text-[var(--accent-primary)] drop-shadow-md' : 'text-white/50 hover:text-white'}`}
+                      >
+                         {isDownloading ? <Loader2 size={24} className="animate-spin" /> : isDownloaded ? <Check size={24} /> : <Download size={24} />}
+                     </button>
+
+                     <button onClick={toggleRepeatMode} className={`transition-all hover:scale-110 p-2 ${repeatMode !== 'off' ? 'text-[var(--accent-primary)] drop-shadow-md' : 'text-white/50 hover:text-white'}`}>
+                       {repeatMode === 'one' ? <Repeat1 size={22} /> : <Repeat size={22} />}
+                     </button>
+                  </div>
+                </motion.div>
 
                 <AnimatePresence>
                   {showQueue && (
-                    <motion.div initial={{ x: 300, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 300, opacity: 0 }} className="hidden md:flex relative w-1/3 min-w-[380px] bg-black/[0.02] dark:bg-white/[0.03] backdrop-blur-xl rounded-[40px] p-8 border border-black/5 dark:border-white/5 flex-col h-full overflow-hidden shadow-2xl">
-                      <div className="flex justify-between items-center mb-8 shrink-0">
-                        <h3 className="font-black text-2xl text-black dark:text-white flex items-center gap-4 tracking-tighter"><ListMusic className="text-[#7C3AED]" size={28} /> Siguiente</h3>
-                        <button onClick={() => setShowQueue(false)} className="p-3 bg-black/5 dark:bg-white/5 rounded-2xl text-black/40 dark:text-white/50 hover:text-red-500 transition-all"><X size={20} /></button>
+                    <motion.div initial={{ y: 300, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 300, opacity: 0 }} className="absolute bottom-0 inset-x-0 z-[100] h-3/4 bg-black/80 backdrop-blur-3xl rounded-t-[50px] border-t border-white/10 shadow-2xl overflow-hidden flex flex-col p-8 sm:p-12">
+                      <div className="flex justify-between items-center mb-10 shrink-0">
+                        <h3 className="font-black text-3xl text-white flex items-center gap-5 tracking-tighter"><ListMusic className="text-[var(--accent-primary)]" size={32} /> Siguiente Mezcla</h3>
+                        <button onClick={() => setShowQueue(false)} className="p-4 bg-white/5 rounded-2xl text-white/40 hover:text-red-500 transition-all"><X size={24} /></button>
                       </div>
-                      <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
+                      <div className="flex-1 overflow-y-auto space-y-4 pr-3 custom-scrollbar pb-safe">
                         {queue.map((song, idx) => (
-                          <div key={`${song.id}-${idx}`} className={`group flex items-center justify-between p-4 rounded-2xl transition-all cursor-pointer border ${currentSong.id === song.id ? 'bg-[#7C3AED]/10 border-[#7C3AED]/20' : 'bg-transparent border-transparent hover:bg-black/5 dark:hover:bg-white/5 hover:border-black/5 dark:hover:border-white/5'}`} onClick={() => playFromQueue(idx)}>
-                            <div className="flex items-center min-w-0 pr-2">
-                               <div className="relative w-12 h-12 mr-4 shrink-0 bg-gray-200 dark:bg-black rounded-xl overflow-hidden shadow-sm">
-                                 <Image 
-                                   src={YouTubeExtractionService.normalizeUrl(song.thumbnailUrl)} 
-                                   alt={song.title} 
-                                   fill 
-                                   sizes="48px" 
-                                   className="object-cover" 
-                                 />
+                           <div key={`${song.id}-${idx}`} className={`group flex items-center justify-between p-5 rounded-[25px] transition-all cursor-pointer border ${currentSong.id === song.id ? 'bg-[var(--accent-primary)]/20 border-[var(--accent-primary)]/40 shadow-[0_10px_30px_var(--accent-primary)]/20' : 'bg-white/2 border-white/5 hover:bg-white/10 hover:border-white/20'}`} onClick={() => playFromQueue(idx)}>
+                             <div className="flex items-center min-w-0 pr-4">
+                               <div className="relative w-14 h-14 mr-5 shrink-0 rounded-2xl overflow-hidden shadow-xl">
+                                 <Image src={YouTubeExtractionService.normalizeUrl(song.thumbnailUrl)} alt={song.title} fill sizes="56px" className="object-cover" />
                                </div>
                                <div className="min-w-0">
-                                 <h4 className={`text-sm font-bold overflow-hidden ${currentSong.id === song.id ? 'text-[#7C3AED]' : 'text-black dark:text-white'}`}>
-                                   <MarqueeText text={song.title} />
-                                 </h4>
-                                 <p className="text-black/40 dark:text-white/40 text-xs font-semibold truncate mt-0.5">{song.artistName}</p>
+                                 <h4 className={`text-base font-bold truncate ${currentSong.id === song.id ? 'text-[var(--accent-primary)]' : 'text-white'}`}>{song.title}</h4>
+                                 <p className="text-white/40 text-sm font-semibold truncate mt-1">{song.artistName}</p>
                                </div>
-                            </div>
-                            <button className="text-black/20 dark:text-white/20 hover:text-red-500 p-2 opacity-0 group-hover:opacity-100 transition-all" onClick={(e) => { e.stopPropagation(); if(currentSong.id !== song.id) removeFromQueue(idx); }}><X size={18} /></button>
-                          </div>
+                             </div>
+                             {currentSong.id !== song.id && (
+                               <button className="text-white/20 hover:text-red-500 p-2 opacity-0 group-hover:opacity-100 transition-all" onClick={(e) => { e.stopPropagation(); removeFromQueue(idx); }}><X size={20} /></button>
+                             )}
+                           </div>
                         ))}
                       </div>
                     </motion.div>
                   )}
                 </AnimatePresence>
 
-                <div className="md:hidden w-full flex flex-col mt-auto gap-3 sm:gap-8 mb-4">
-                  <div className="flex justify-between items-center px-2">
-                    <div className="flex-1 min-w-0 pr-6">
-                      <h2 className="text-2xl font-black text-black dark:text-white overflow-hidden tracking-tight">
-                        <MarqueeText text={currentSong.title} />
-                      </h2>
-                      <p className="text-lg text-black/40 dark:text-white/50 font-bold truncate">{currentSong.artistName}</p>
-                        {isDebugMode && (
-                          <p className="text-xs text-red-500 font-mono mt-2 bg-black/10 dark:bg-white/10 p-2 rounded-lg break-all">
-                            ENGINE: {typeof window !== 'undefined' && (audioEngine as any).isNativeEngine?.() ? 'ExoPlayer (Android)' : 'HTMLAudio (Web)'}<br/>
-                            {typeof window !== 'undefined' && (audioEngine as any).isNativeEngine?.() ? (
-                              <>
-                            SOURCE: {(audioEngine as any).currentUrlSource?.toUpperCase()}<br/>
-                            EXO TIME: {(audioEngine as any).exoCurrentTime?.toFixed(1)}s / {(audioEngine as any).exoDuration?.toFixed(1)}s<br/>
-                            EXO PLAYING: {String((audioEngine as any).exoPlaying)}
-                              </>
-                            ) : (
-                              <>
-                                SRC: {(audioEngine as any).htmlPlayer?.src?.substring(0, 50) ?? 'undefined'}<br/>
-                                PAUSED: {String((audioEngine as any).htmlPlayer?.paused)}
-                              </>
-                            )}
-                          <div className="flex gap-2">
-                            <button onClick={(e) => { e.stopPropagation(); loadFormats(); }} className="mt-1.5 flex-1 bg-[#7C3AED] text-white py-1.5 rounded text-[10px] font-bold uppercase">🔎 Web</button>
-                            <button onClick={(e) => { e.stopPropagation(); inspectLocalBlob(); }} className="mt-1.5 flex-1 bg-red-500 text-white py-1.5 rounded text-[10px] font-bold uppercase">🔬 Local</button>
-                          </div>
-                          </p>
-                        )}
-                    </div>
-                    <div className="flex gap-4">
-                      <button onClick={handleToggleFavorite} className="p-2"><Heart size={28} fill={isFavorite ? "#7C3AED" : "none"} className={isFavorite ? "text-[#7C3AED]" : "text-black/40 dark:text-white/40"} /></button>
-                      <button onClick={() => setIsPlaylistModalOpen(true)} className="p-2"><Plus size={28} className="text-black/40 dark:text-white/40" /></button>
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); toggleDownload(currentSong); }}
-                        disabled={isDownloading}
-                        className={`p-2 transition-all ${
-                          isDownloaded 
-                            ? 'text-[#7C3AED]' 
-                            : isDownloading 
-                              ? 'text-gray-400'
-                              : 'text-black/40 dark:text-white/40'
-                        }`}
-                      >
-                        {isDownloading ? <Loader2 size={28} className="animate-spin" /> : isDownloaded ? <Check size={28} /> : <Download size={28} />}
-                      </button>
-                    </div>
-                  </div>
-                  <div className="relative group px-2">
-                    <input type="range" min="0" max={duration || 100} value={progress || 0} onChange={(e) => seekTo(Number(e.target.value))} className="absolute inset-0 w-full h-4 -top-1.5 opacity-0 cursor-pointer z-10" />
-                    <div className="h-2 w-full bg-black/5 dark:bg-white/10 rounded-full overflow-hidden relative"><div className="h-full bg-[#7C3AED] rounded-full absolute top-0 left-0" style={{ width: `${progressPercent}%` }} /></div>
-                    <div className="flex justify-between text-[10px] text-black/30 dark:text-white/40 mt-3 font-black uppercase tracking-widest"><span>{formatTime(progress)}</span><span>{formatTime(duration)}</span></div>
-                  </div>
-                  <div className="flex items-center justify-center gap-10">
-                    <button onClick={playPrevious} className="text-black dark:text-white"><SkipBack size={40} fill="currentColor" /></button>
-                    <button onClick={togglePlayPause} className="w-20 h-20 bg-black dark:bg-white text-white dark:text-black rounded-full flex items-center justify-center shadow-xl">
-                      {isBuffering
-                        ? <Loader2 size={36} className="animate-spin" />
-                        : isPlaying ? <Pause size={36} fill="currentColor" /> : <Play size={36} fill="currentColor" className="ml-1" />}
-                    </button>
-                    <button onClick={() => playNext()} className="text-black dark:text-white"><SkipForward size={40} fill="currentColor" /></button>
-                  </div>
-                  <div className="flex justify-between items-center px-4 mt-4 pb-safe">
-                    <button onClick={toggleShuffle} className={`p-2 transition-all ${isShuffle ? 'text-[#7C3AED]' : 'text-black/20 dark:text-white/40'}`}><Shuffle size={24} /></button>
-                    <div className="flex items-center gap-8">
-                      <VolumeControl />
-                      <button onClick={() => setShowLyrics(!showLyrics)} className={`p-2 transition-all ${showLyrics ? 'text-[#7C3AED]' : 'text-black/20 dark:text-white/40'}`}><Mic2 size={24} /></button>
-                      <button onClick={toggleRepeatMode} className={`p-2 transition-all ${repeatMode !== 'off' ? 'text-[#7C3AED]' : 'text-black/20 dark:text-white/40'}`}>{repeatMode === 'one' ? <Repeat1 size={24} /> : <Repeat size={24} />}</button>
-                    </div>
-                    <button onClick={() => setShowQueue(!showQueue)} className={`p-2 transition-all ${showQueue ? 'text-[#7C3AED]' : 'text-black/20 dark:text-white/40'}`}><ListMusic size={24} /></button>
-                  </div>
-                </div>
+
 
               </div>
             </div>
@@ -528,7 +489,7 @@ export function PlayerOverlay() {
               </div>
               
               {loadingFormats ? (
-                <div className="flex-1 flex items-center justify-center min-h-[200px]"><Loader2 className="animate-spin text-[#7C3AED]" size={36} /></div>
+                <div className="flex-1 flex items-center justify-center min-h-[200px]"><Loader2 className="animate-spin text-[var(--accent-primary)]" size={36} /></div>
               ) : (
                 <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar pb-safe">
                   {formats.map((f, i) => (
@@ -541,10 +502,10 @@ export function PlayerOverlay() {
                            setShowFormats(false);
                          }
                       }}
-                      className="w-full text-left p-4 rounded-2xl bg-black/5 dark:bg-white/5 hover:bg-[#7C3AED]/20 transition-all group border border-black/5 dark:border-white/5"
+                      className="w-full text-left p-4 rounded-2xl bg-black/5 dark:bg-white/5 hover:bg-[var(--accent-primary)]/20 transition-all group border border-black/5 dark:border-white/5"
                     >
                       <div className="flex justify-between items-center mb-2">
-                        <span className="font-black text-lg text-[#7C3AED]">{f.format_id}</span>
+                        <span className="font-black text-lg text-[var(--accent-primary)]">{f.format_id}</span>
                         <span className="text-sm font-bold bg-black/10 dark:bg-white/10 px-2 py-0.5 rounded-md text-black/60 dark:text-white/60">{f.ext}</span>
                       </div>
                       <div className="text-xs text-black/60 dark:text-white/60 space-y-1 font-mono">
@@ -566,6 +527,67 @@ export function PlayerOverlay() {
         onClose={() => setIsPlaylistModalOpen(false)} 
         song={currentSong} 
       />
+
+      <AnimatePresence>
+        {showTimerModal && (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowTimerModal(false)}
+          >
+            <div className="bg-white dark:bg-[#181818] p-6 rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-bold dark:text-white flex items-center gap-2">
+                  <Timer className="text-[var(--accent-primary)]" size={24} />
+                  Temporizador
+                </h3>
+                <button onClick={() => setShowTimerModal(false)}><X size={24} className="dark:text-white/50" /></button>
+              </div>
+
+              {isShutdownTimerActive && timerRemaining !== null && (
+                <div className="mb-6 p-4 bg-[var(--accent-primary)]/10 rounded-2xl text-center">
+                  <p className="text-xs font-bold uppercase text-[var(--accent-primary)] mb-1">Apagando en</p>
+                  <p className="text-3xl font-black text-[var(--accent-primary)]">
+                    {Math.floor(timerRemaining / 60000)}:{String(Math.floor((timerRemaining % 60000) / 1000)).padStart(2, '0')}
+                  </p>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                {[5, 15, 30, 60].map((mins) => (
+                  <button
+                    key={mins}
+                    onClick={() => {
+                      startShutdownTimer(mins * 60 * 1000);
+                      setShowTimerModal(false);
+                    }}
+                    className="w-full text-left p-4 rounded-2xl bg-black/5 dark:bg-white/5 hover:bg-[#7C3AED]/20 transition-all font-bold text-black dark:text-white flex justify-between items-center"
+                  >
+                    <span>{mins} minuto{mins > 1 ? 's' : ''}</span>
+                    {isShutdownTimerActive && shutdownTimerEndsAt && Math.ceil((shutdownTimerEndsAt - Date.now()) / 60000) === mins && (
+                      <span className="text-[#7C3AED]">●</span>
+                    )}
+                  </button>
+                ))}
+
+                {isShutdownTimerActive && (
+                  <button
+                    onClick={() => {
+                      cancelShutdownTimer();
+                      setShowTimerModal(false);
+                    }}
+                    className="w-full text-left p-4 rounded-2xl bg-red-500/10 hover:bg-red-500/20 transition-all font-bold text-red-500"
+                  >
+                    Cancelar temporizador
+                  </button>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }

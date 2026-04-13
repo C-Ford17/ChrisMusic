@@ -51,7 +51,7 @@ export function AddToPlaylistModal({ song, isOpen, onClose }: AddToPlaylistModal
               className="w-full flex items-center gap-4 p-4 rounded-2xl bg-black/[0.02] dark:bg-white/[0.02] hover:bg-black/[0.05] dark:hover:bg-white/[0.05] border border-black/5 dark:border-white/5 transition-all text-left group"
             >
               <div className="w-12 h-12 rounded-xl bg-gray-100 dark:bg-white/5 flex items-center justify-center shrink-0 shadow-sm group-hover:scale-110 transition-transform">
-                <Music size={20} className="text-[#7C3AED]" />
+                <Music size={20} className="text-[var(--accent-primary)]" />
               </div>
               <span className="font-bold truncate text-sm text-black/70 dark:text-white/70 group-hover:text-black dark:group-hover:text-white">{pl.name}</span>
             </button>
@@ -73,14 +73,14 @@ export function AddToPlaylistModal({ song, isOpen, onClose }: AddToPlaylistModal
             <input 
               type="text" 
               placeholder="My awesome mix" 
-              className="flex-1 bg-black/5 dark:bg-black/50 border border-black/5 dark:border-white/10 rounded-xl px-4 py-3 text-sm text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-[#7C3AED] transition-all placeholder:text-black/20 dark:placeholder:text-white/20"
+              className="flex-1 bg-black/5 dark:bg-black/50 border border-black/5 dark:border-white/10 rounded-xl px-4 py-3 text-sm text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)] transition-all placeholder:text-black/20 dark:placeholder:text-white/20"
               value={newPlaylistName}
               onChange={(e) => setNewPlaylistName(e.target.value)}
             />
             <button 
               onClick={handleCreate}
               disabled={!newPlaylistName.trim()}
-              className="w-12 h-12 flex items-center justify-center rounded-xl bg-[#7C3AED] text-white hover:bg-violet-500 shadow-lg shadow-[#7C3AED]/20 disabled:opacity-50 transition-all shrink-0 active:scale-90"
+              className="w-12 h-12 flex items-center justify-center rounded-xl bg-[var(--accent-primary)] text-white hover:brightness-110 shadow-lg shadow-[var(--accent-primary)]/20 disabled:opacity-50 transition-all shrink-0 active:scale-90"
               title="Create and add"
             >
               <Plus size={24} />
