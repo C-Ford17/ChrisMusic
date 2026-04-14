@@ -1,0 +1,76 @@
+name: 🤖 Android Native Release
+
+on:
+  push:
+    tags:
+      - 'native-[0-9]+.[0-9]+.[0-9]+'  # Tags como native-1.0.2
+
+jobs:
+  build-android:
+    name: Build Signed APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: ⬇️ Checkout
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: ☕ Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🏗️ Build Next.js + Capacitor sync
+        run: |
+          npm run build
+          npx cap sync android
+
+      - name: 🔑 Decode Keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/keystore.jks
+
+      - name: 📝 Create keystore.properties
+        run: |
+          cat > android/keystore.properties <<EOF
+          storeFile=keystore.jks
+          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          EOF
+
+      - name: 🔧 Make gradlew executable
+        run: chmod +x android/gradlew
+
+      - name: 🏗️ Build Release APK
+        run: |
+          cd android
+          ./gradlew assembleRelease --no-daemon
+
+      - name: 📋 Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#native-}" >> $GITHUB_OUTPUT
+
+      - name: 🚀 Create GitHub Release and upload APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "ChrisMusic Native ${{ steps.version.outputs.VERSION }}"
+          body: |
+            ## 🤖 Actualización Nativa (APK)
+            Esta versión requiere instalación manual del APK.
+            
+            > ⚠️ Recuerda desinstalar la versión anterior antes de instalar si hay conflictos de firma.
+          files: android/app/build/outputs/apk/release/app-release.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

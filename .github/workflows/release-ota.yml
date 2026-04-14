@@ -1,0 +1,47 @@
+name: 🌐 OTA Web Release
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'   # Solo tags como 1.0.5 (sin la 'v')
+
+jobs:
+  build-and-release:
+    name: Build & Upload dist.zip
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: ⬇️ Checkout
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🏗️ Build Next.js
+        run: npm run build
+
+      - name: 🗜️ Create dist.zip (with _next included)
+        run: |
+          cd out
+          zip -r ../dist.zip . -x "*.DS_Store"
+          cd ..
+
+      - name: 🚀 Create GitHub Release and upload dist.zip
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "ChrisMusic ${{ github.ref_name }}"
+          body: |
+            ## 🌐 Actualización de Interfaz (OTA)
+            Esta versión se instala automáticamente en la app sin necesidad de reinstalar el APK.
+          files: dist.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

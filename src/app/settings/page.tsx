@@ -600,6 +600,25 @@ export default function SettingsPage() {
               <ChevronRight size={18} className="text-zinc-600 group-hover:translate-x-1 transition-transform" />
             </button>
 
+            <button 
+              onClick={() => {
+                localStorage.removeItem('current_web_version');
+                window.dispatchEvent(new CustomEvent('check-for-updates'));
+              }}
+              className="w-full flex items-center justify-between p-8 hover:bg-white dark:hover:bg-white/2 transition-all text-left border-t border-black/5 dark:border-white/5 group"
+            >
+              <div className="flex items-center gap-5">
+                <div className="p-4 bg-orange-500/10 text-orange-500 rounded-2xl group-hover:bg-orange-500 group-hover:text-white transition-all">
+                  <RefreshCw size={16} />
+                </div>
+                <div>
+                  <p className="font-black text-black/80 dark:text-white/90 uppercase tracking-tighter text-sm">Reinstalar Actualización</p>
+                  <p className="text-[10px] font-bold text-black/30 dark:text-white/40 mt-0.5 uppercase tracking-widest">Forzar re-descarga de la interfaz</p>
+                </div>
+              </div>
+              <ChevronRight size={18} className="text-zinc-600 group-hover:translate-x-1 transition-transform" />
+            </button>
+
             <a 
               href="https://github.com/C-Ford17/ChrisMusic" 
               target="_blank" 
