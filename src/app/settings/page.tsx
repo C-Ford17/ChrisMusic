@@ -602,8 +602,7 @@ export default function SettingsPage() {
 
             <button 
               onClick={() => {
-                localStorage.removeItem('current_web_version');
-                window.dispatchEvent(new CustomEvent('check-for-updates'));
+                window.dispatchEvent(new CustomEvent('force-update-check'));
               }}
               className="w-full flex items-center justify-between p-8 hover:bg-white dark:hover:bg-white/2 transition-all text-left border-t border-black/5 dark:border-white/5 group"
             >

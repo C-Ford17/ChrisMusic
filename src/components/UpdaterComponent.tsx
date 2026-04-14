@@ -43,7 +43,7 @@ interface UpdateInfo {
 }
 
 // Esta versión debe coincidir con la de package.json cada vez que hagas un build nativo
-const APP_CODE_VERSION = "1.0.6";
+const APP_CODE_VERSION = "1.0.7";
 
 export function UpdaterComponent() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
@@ -51,9 +51,9 @@ export function UpdaterComponent() {
   const [isUpdating, setIsUpdating] = useState(false);
 
   useEffect(() => {
-    async function checkForUpdates(isManual = false) {
+    async function checkForUpdates(isManual = false, force = false) {
       try {
-        if (isManual) toast.info("Buscando actualizaciones...");
+        if (isManual) toast.info(force ? "Forzando reinstalación..." : "Buscando actualizaciones...");
         const isTauri = typeof window !== 'undefined' && !!(window as any).__TAURI_INTERNALS__;
 
         if (isTauri) {
@@ -113,13 +113,13 @@ export function UpdaterComponent() {
 
             // 2. Check for Web Update (OTA) via GitHub
             if (androidData.web_version && androidData.web_url) {
-              if (compareVersions(androidData.web_version, currentWebVersion) > 0) {
+              if (force || compareVersions(androidData.web_version, currentWebVersion) > 0) {
                 setUpdateAvailable(true);
                 setUpdateInfo({
                   version: androidData.web_version,
                   currentNative: nativeVersion,
                   currentWeb: currentWebVersion,
-                  notes: data.notes || "Nueva actualización de interfaz (OTA).",
+                  notes: force ? "REINSTALAR: " + (data.notes || "") : (data.notes || "Nueva actualización de interfaz (OTA)."),
                   downloadUrl: androidData.web_url,
                   type: 'android-ota',
                 });
@@ -138,12 +138,16 @@ export function UpdaterComponent() {
 
     // Listen for manual trigger
     const handleManualCheck = () => checkForUpdates(true);
+    const handleForceCheck = () => checkForUpdates(true, true);
+    
     window.addEventListener('check-for-updates', handleManualCheck);
+    window.addEventListener('force-update-check', handleForceCheck);
 
     const timer = setTimeout(() => checkForUpdates(false), 3000);
     return () => {
       clearTimeout(timer);
       window.removeEventListener('check-for-updates', handleManualCheck);
+      window.removeEventListener('force-update-check', handleForceCheck);
     };
   }, []);
 
