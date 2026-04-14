@@ -4,7 +4,7 @@
   "pub_date": "2026-04-14T00:00:00Z",
   "platforms": {
     "android": {
-      "url": "https://github.com/C-Ford17/ChrisMusic/releases/download/1.0.2/chrismusic-1.0.2.apk",
+      "url": "https://github.com/C-Ford17/ChrisMusic/releases/download/native-1.0.2/app-release.apk",
       "web_version": "1.0.6",
       "web_url": "https://github.com/C-Ford17/ChrisMusic/releases/download/1.0.6/dist.zip"
     },
