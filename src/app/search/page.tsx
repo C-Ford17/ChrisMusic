@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { usePlayerStore } from '@/features/player/store/playerStore';
-import { Search, Plus, ListPlus, Music, Clock, Trash2, Download, Check, Loader2, ArrowUpLeft } from 'lucide-react';
+import { Search, Plus, ListPlus, Music, Clock, Trash2, Download, Check, Loader2, ArrowUpLeft, X } from 'lucide-react';
 import { toast } from 'sonner';
 import Image from 'next/image';
 import { type Song } from '@/core/types/music';
@@ -167,6 +167,20 @@ export default function SearchPage() {
                   }
                 }}
               />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuery('');
+                    setResults([]);
+                    setShowSuggestions(false);
+                    setLastSearchedQuery('');
+                  }}
+                  className="absolute right-5 top-1/2 -translate-y-1/2 p-2 text-gray-400 hover:text-black dark:hover:text-white transition-colors z-10"
+                >
+                  <X size={20} />
+                </button>
+              )}
             </form>
 
             {/* Suggestions Dropdown */}
