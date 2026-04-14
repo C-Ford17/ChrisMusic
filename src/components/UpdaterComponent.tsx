@@ -97,11 +97,11 @@ export function UpdaterComponent() {
             const savedWebVersion = localStorage.getItem('current_web_version');
             const currentWebVersion = savedWebVersion || APP_CODE_VERSION || nativeVersion;
 
-            // 1. Check for Native Update (APK) - Priority
-            if (compareVersions(data.version, nativeVersion) > 0) {
+            // 1. Check for Native Update (APK) - Usamos versión específica de Android
+            if (androidData.version && compareVersions(androidData.version, nativeVersion) > 0) {
               setUpdateAvailable(true);
               setUpdateInfo({
-                version: data.version,
+                version: androidData.version,
                 currentNative: nativeVersion,
                 currentWeb: currentWebVersion,
                 notes: data.notes || "Nueva versión nativa disponible.",

@@ -49,26 +49,24 @@ try {
     fs.writeFileSync(files.tauri, JSON.stringify(tauri, null, 2));
 
     const upd = JSON.parse(fs.readFileSync(files.updater, 'utf8'));
-    upd.version = newVersion; // Root version (shared for binaries)
+    upd.version = newVersion; // Root version (exclusiva para Tauri)
     upd.platforms['windows-x86_64'].url = `https://github.com/C-Ford17/ChrisMusic/releases/download/tauri-${newVersion}/ChrisMusic_${newVersion}_x64-setup.exe`;
     fs.writeFileSync(files.updater, JSON.stringify(upd, null, 2));
-    console.log('✅ Archivos TAURI actualizados (tauri.conf.json, updater.json)');
+    console.log('✅ Archivos TAURI actualizados');
   }
 
   // 3. ANDROID NATIVE (APK)
   if (isNative) {
     let gradle = fs.readFileSync(files.gradle, 'utf8');
-    // Bump versionCode (+1)
     gradle = gradle.replace(/versionCode (\d+)/, (match, p1) => `versionCode ${parseInt(p1) + 1}`);
-    // Bump versionName
     gradle = gradle.replace(/versionName ".*"/, `versionName "${newVersion}"`);
     fs.writeFileSync(files.gradle, gradle);
 
     const upd = JSON.parse(fs.readFileSync(files.updater, 'utf8'));
-    upd.version = newVersion; // Root version
+    upd.platforms.android.version = newVersion; // Versión nativa específica de Android
     upd.platforms.android.url = `https://github.com/C-Ford17/ChrisMusic/releases/download/native-${newVersion}/app-release.apk`;
     fs.writeFileSync(files.updater, JSON.stringify(upd, null, 2));
-    console.log('✅ Archivos NATIVE actualizados (build.gradle, updater.json)');
+    console.log('✅ Archivos NATIVE actualizados');
   }
 
   console.log(`\n🚀 ¡LISTO! v${newVersion} aplicada.`);
