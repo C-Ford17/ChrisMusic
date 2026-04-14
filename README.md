@@ -13,7 +13,8 @@
 - 📱 **PWA Support**: Installable on mobile and desktop devices with offline detection.
 - 🔒 **Local-First Privacy**: Your history and playlists are stored locally on your device (IndexedDB).
 - 🚀 **Next-Gen Tech**: Built with Next.js 16, React 19, and Tailwind CSS 4.
-
+- 📱 **Multi-Platform Native**: Android (via Capacitor + ExoPlayer) and Windows (via Tauri + Rust yt-dlp).
+- 🔄 **Over-The-Air (OTA) Updates**: Seamless, serverless app updates directly from GitHub Releases for Desktop & Mobile.
 ## 🛠️ Tech Stack
 
 - **Framework**: [Next.js 16 (App Router)](https://nextjs.org/)
@@ -48,14 +49,14 @@
     npm start
     ```
 
-## 🏁 Sprint 6 Status
+## 🏁 Current Status (v1.0.0)
 
-- [x] **Premium UI Refactor**: Full-screen player, lyrics panel, and advanced library view.
-- [x] **Light Mode Support**: Comprehensive theme adjustments across all components.
-- [x] **Theme Sync Fixes**: Improved `ThemeProvider` for Next.js App Router stability.
-- [ ] **Unit Testing**: Implementing tests for `AudioEngine` and core stores.
-- [ ] **Lighthouse PWA Audit**: Target score > 90.
-- [ ] **Tauri Evaluation**: Desktop PoC for Windows.
+- [x] **Premium UI Refactor**: Immersive full-screen player, lyrics panel, and advanced library view.
+- [x] **Light/Dark & Accent Colors**: Dynamic, gorgeous theme adjustments and CSS variable accents.
+- [x] **Native Android ExoPlayer Backbone**: Flawless background audio rendering via Capacitor.
+- [x] **Tauri Windows Extractor**: Ultra-fast YouTube extraction with Rust-powered `yt-dlp` integration.
+- [x] **Serverless Auto-Updater**: Zero-cost independent OTA updates system using GitHub `.json` manifests & Releases.
+- [ ] **Unit Testing & Optimization**: Target Lighthouse PWA Audit score > 90.
 
 ## 🤝 Contribution
 
