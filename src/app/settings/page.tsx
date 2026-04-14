@@ -579,7 +579,7 @@ export default function SettingsPage() {
                 <Info size={24} />
               </div>
               <div>
-                <p className="font-black text-black/80 dark:text-white/90">Versión 1.0.1-stable</p>
+                <p className="font-black text-black/80 dark:text-white/90">Versión 1.0.2-stable</p>
                 <p className="text-sm font-bold text-black/30 dark:text-white/40 mt-0.5">Lanzamiento Oficial • ChrisMusic Premium</p>
               </div>
             </div>
