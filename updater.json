@@ -1,5 +1,5 @@
 {
-  "version": "1.0.2",
+  "version": "1.0.7",
   "notes": "v1.0.7: Fix de volumen, build de tauri corregido y sistema de reinstalación forzada",
   "pub_date": "2026-04-14T00:00:00Z",
   "platforms": {
@@ -10,7 +10,7 @@
     },
     "windows-x86_64": {
       "signature": "SIGNATURE_AQUI_SI_SE_REQUIERE",
-      "url": "https://github.com/C-Ford17/ChrisMusic/releases/download/1.0.2/chrismusic_1.0.2_x64-setup.exe"
+      "url": "https://github.com/C-Ford17/ChrisMusic/releases/download/tauri-1.0.7/ChrisMusic_1.0.7_x64-setup.exe"
     }
   }
 }
