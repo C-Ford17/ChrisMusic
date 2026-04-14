@@ -1,0 +1,14 @@
+{
+  "version": "0.1.1",
+  "notes": "Mejoras de rendimiento y UI",
+  "pub_date": "2026-04-14T00:00:00Z",
+  "platforms": {
+    "android": {
+      "url": "https://github.com/username/chrismusic/releases/download/v0.1.1/chrismusic-v0.1.1.apk"
+    },
+    "windows-x86_64": {
+      "signature": "SIGNATURE_AQUI_SI_SE_REQUIERE",
+      "url": "https://github.com/username/chrismusic/releases/download/v0.1.1/chrismusic_0.1.1_x64-setup.exe"
+    }
+  }
+}

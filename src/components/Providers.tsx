@@ -6,6 +6,7 @@ import { PlayerOverlay } from "@/features/player/components/PlayerOverlay";
 import { BottomNav } from "@/shared/components/BottomNav";
 import { YouTubePlayer } from "@/features/player/components/YouTubePlayer";
 import { OfflineDetector } from "@/components/OfflineDetector";
+import { UpdaterComponent } from "@/components/UpdaterComponent";
 
 import { usePlayerStore, initPlayerStoreSync, initializePlayerSession } from "@/features/player/store/playerStore";
 import { useEffect } from "react";
@@ -36,6 +37,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <AppEvents />
       <Toaster position="top-center" richColors />
       <OfflineDetector />
+      <UpdaterComponent />
       <YouTubePlayer />
       <main className="flex-1">
         {children}
