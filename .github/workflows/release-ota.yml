@@ -5,6 +5,9 @@ on:
     tags:
       - '[0-9]+.[0-9]+.[0-9]+'   # Solo tags como 1.0.5 (sin la 'v')
 
+permissions:
+  contents: write
+
 jobs:
   build-and-release:
     name: Build & Upload dist.zip

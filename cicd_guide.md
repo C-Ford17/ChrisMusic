@@ -1,88 +1,108 @@
 # 🚀 Guía CI/CD — ChrisMusic GitHub Actions
 
-Tienes configurados **dos workflows** que automatizan todo el proceso de publicación.
+Tienes configurados **tres workflows** que automatizan todo el proceso de publicación.
 
 ## 📋 Resumen de Workflows
 
-| Workflow | Archivo | Se activa con | Qué hace |
+| Workflow | Archivo | Tag de activación | Qué produce |
 |---|---|---|---|
-| **OTA Web** | `release-ota.yml` | Tag tipo `1.0.5` | Compila Next.js y sube `dist.zip` al Release |
-| **Android Nativo** | `release-android.yml` | Tag tipo `native-1.0.2` | Compila APK firmado y lo sube al Release |
+| **OTA Web** | `release-ota.yml` | `1.0.6` (sin prefijo) | `dist.zip` para actualización en vivo |
+| **Android Nativo** | `release-android.yml` | `native-1.0.3` | `app-release.apk` firmado |
+| **Tauri Desktop** | `release-tauri.yml` | `tauri-1.0.2` | Instalador `.exe` para Windows |
 
 ---
 
-## 🌐 1. Publicar una actualización de Interfaz (OTA)
+## 🗂️ Qué cambiar en `updater.json` según el tipo de release
 
-### Cuándo usarlo
-Cuando hagas cambios solo en el frontend (TSX, CSS, lógica de React). **No requiere reinstalar la app.**
+```json
+{
+  "version": "1.0.2",          // ← Cambiar solo si publicas APK nativo
+  "platforms": {
+    "android": {
+      "url": "...native-1.0.2/app-release.apk",  // ← Cambiar solo si publicas APK nativo
+      "web_version": "1.0.6",                     // ← Cambiar solo si publicas OTA web
+      "web_url": "...1.0.6/dist.zip"              // ← Cambiar solo si publicas OTA web
+    }
+  }
+}
+```
 
-### Pasos
+---
+
+## 🌐 1. Publicar actualización de Interfaz (OTA Web)
+
+### Qué cambiar antes del tag
+- `updater.json`: subir `web_version` y `web_url` (usar el tag sin prefijo)
+- `UpdaterComponent.tsx`: subir `APP_CODE_VERSION`
+- `package.json`: subir `version`
+
 ```powershell
-# 1. Editar updater.json: subir web_version y web_url al nuevo tag
-# 2. Editar UpdaterComponent.tsx: subir APP_CODE_VERSION
-# 3. Commit de los cambios
 git add -A
 git commit -m "feat: descripcion del cambio"
 git push
 
-# 4. Crear el tag (sin 'v', ej: 1.0.6)
-git tag 1.0.6
-git push origin 1.0.6
+git tag 1.0.7
+git push origin 1.0.7
 ```
-GitHub Actions compilará automáticamente y creará el Release con el `dist.zip` incluido. ✅
+GitHub Actions crea el Release y sube el `dist.zip` automáticamente. ✅
 
 ---
 
-## 🤖 2. Publicar un APK Nativo de Android
+## 🤖 2. Publicar APK Nativo de Android
 
-### Cuándo usarlo
-Cuando hagas cambios en:
-- Carpeta `android/` (Java/Kotlin)
-- Plugins de Capacitor
-- `capacitor.config.ts`
-- Versión de `versionCode` o `versionName` en `build.gradle`
+### Qué cambiar antes del tag
+- `updater.json`: subir `"version"` raíz y `"url"` del APK (usar tag con prefijo `native-`)
+- `android/app/build.gradle`: subir `versionCode` y `versionName`
 
-### Prerequisito: Configurar Secretos en GitHub
-
-Antes de que el workflow de Android funcione, debes añadir estos **4 secretos** en tu repositorio:
-
-> **GitHub → Settings → Secrets and variables → Actions → New repository secret**
-
-| Nombre del Secreto | Descripción |
-|---|---|
-| `ANDROID_KEYSTORE_BASE64` | Tu archivo `.jks` convertido a Base64 |
-| `ANDROID_KEYSTORE_PASSWORD` | Contraseña del keystore |
-| `ANDROID_KEY_ALIAS` | Alias de la clave (ej: `key0`) |
-| `ANDROID_KEY_PASSWORD` | Contraseña de la clave |
-
-#### Cómo obtener el Base64 del keystore
 ```powershell
-# En PowerShell, desde la carpeta donde está tu .jks
-[Convert]::ToBase64String([IO.File]::ReadAllBytes("tu-keystore.jks")) | clip
-# Esto copia el Base64 al portapapeles para que lo pegues en el secreto
-```
-
-### Pasos para publicar APK
-```powershell
-# 1. Actualizar versionCode y versionName en android/app/build.gradle
-# 2. Commit de los cambios
 git add -A
 git commit -m "feat(native): descripcion del cambio nativo"
 git push
 
-# 3. Crear el tag nativo
 git tag native-1.0.3
 git push origin native-1.0.3
 ```
-GitHub Actions compilará el APK firmado y lo subirá al Release automáticamente. ✅
+GitHub Actions compila y sube el APK firmado automáticamente. ✅
+
+### Secretos necesarios en GitHub
+| Secreto | Descripción |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | Keystore `.jks` en Base64 |
+| `ANDROID_KEYSTORE_PASSWORD` | Contraseña del keystore |
+| `ANDROID_KEY_ALIAS` | Alias de la clave |
+| `ANDROID_KEY_PASSWORD` | Contraseña de la clave |
 
 ---
 
-> [!NOTE]
-> Los dos workflows son completamente independientes. Puedes tener un Release OTA (`1.0.6`) y un Release Nativo (`native-1.0.3`) al mismo tiempo, cada uno con sus propios assets.
+## 🖥️ 3. Publicar versión de Escritorio (Tauri/Windows)
+
+### Qué cambiar antes del tag
+- `src-tauri/tauri.conf.json`: subir `"version"`
+
+```powershell
+git add -A
+git commit -m "feat(desktop): descripcion del cambio"
+git push
+
+git tag tauri-1.0.2
+git push origin tauri-1.0.2
+```
+GitHub Actions compila el instalador `.exe` automáticamente. ✅
+
+### Secretos necesarios en GitHub
+| Secreto | Descripción |
+|---|---|
+| `TAURI_SIGNING_PRIVATE_KEY` | Clave privada para firmar la app |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Contraseña de esa clave |
+
+---
 
 > [!IMPORTANT]
-> El `updater.json` **siempre debe estar actualizado** antes de crear el tag OTA para que la app sepa a qué URL apuntar para descargar el `dist.zip`.
+> Los tres sistemas de release son completamente **independientes**. Puedes tener la web en `1.0.7`, el APK nativo en `native-1.0.2` y Tauri en `tauri-1.0.1` sin conflicto.
 
 > [!TIP]
-> Si el workflow de Android falla por el keystore, verifica que el Base64 sea correcto ejecutando localmente `./gradlew assembleRelease` dentro de la carpeta `android/` para confirmar que `keystore.properties` funciona.
+> Para volver a disparar un workflow después de un fix, borra y recrea el tag:
+> ```powershell
+> git tag -d 1.0.7 ; git push origin :refs/tags/1.0.7
+> git tag 1.0.7 ; git push origin 1.0.7
+> ```
