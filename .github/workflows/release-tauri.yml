@@ -1,0 +1,58 @@
+name: 🖥️ Tauri Desktop Release
+
+on:
+  push:
+    tags:
+      - 'tauri-[0-9]+.[0-9]+.[0-9]+'  # Tags como tauri-1.0.2
+
+jobs:
+  build-tauri:
+    name: Build Tauri (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'windows-latest'
+            args: '--target x86_64-pc-windows-msvc'
+            artifact_ext: '_x64-setup.exe'
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: ⬇️ Checkout
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 🦀 Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: 📦 Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: 📋 Get version from tag
+        id: version
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF_NAME#tauri-}" >> $GITHUB_OUTPUT
+
+      - name: 🏗️ Build Tauri App
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "ChrisMusic Desktop ${{ steps.version.outputs.VERSION }}"
+          releaseBody: |
+            ## 🖥️ Actualización de Escritorio (Windows)
+            Instala el archivo `.exe` para actualizar la versión de escritorio.
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
