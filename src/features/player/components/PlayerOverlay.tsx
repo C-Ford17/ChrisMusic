@@ -367,9 +367,9 @@ export function PlayerOverlay() {
                   >
                     <p className="font-black text-[var(--accent-primary)]">SISTEMA INFO</p>
                     <p>ID: {currentSong.id}</p>
-                    <p>TYPE: {currentSong.isOffline ? 'OFFLINE' : 'STREAM'}</p>
-                    <p>FMT: {currentSong.audioUrl?.includes('.aac') ? 'AAC' : 'DASH/HLS'}</p>
+                    <p>TYPE: {isDownloaded ? 'OFFLINE' : 'STREAM'}</p>
                     <p>STATE: {isPlaying ? 'PLAYING' : 'PAUSED'}</p>
+                    <p>PROGRESS: {Math.floor(progress)}s / {Math.floor(duration)}s</p>
                     <div className="flex gap-2 mt-2">
                        <button className="px-2 py-1 bg-white/10 rounded-md pointer-events-auto" onClick={inspectLocalBlob}>BLOB HEX</button>
                        <button className="px-2 py-1 bg-white/10 rounded-md pointer-events-auto" onClick={loadFormats}>FORMATS</button>
