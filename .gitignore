@@ -46,3 +46,6 @@ build_log_utf8.txt
 
 # IDE
 .idea/
+
+# Text files
+*.txt
