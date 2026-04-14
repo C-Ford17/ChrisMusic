@@ -1,6 +1,6 @@
 {
-  "version": "1.0.3",
-  "notes": "Feature: Search clear button",
+  "version": "1.0.2",
+  "notes": "Feature: Search clear button (OTA Update)",
   "pub_date": "2026-04-14T00:00:00Z",
   "platforms": {
     "android": {
