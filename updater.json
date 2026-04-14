@@ -4,7 +4,9 @@
   "pub_date": "2026-04-14T00:00:00Z",
   "platforms": {
     "android": {
-      "url": "https://github.com/C-Ford17/ChrisMusic/releases/download/v1.0.2/chrismusic-v1.0.2.apk"
+      "url": "https://github.com/C-Ford17/ChrisMusic/releases/download/v1.0.2/chrismusic-v1.0.2.apk",
+      "web_version": "1.0.2",
+      "web_url": "https://github.com/C-Ford17/ChrisMusic/releases/download/v1.0.2/dist.zip"
     },
     "windows-x86_64": {
       "signature": "SIGNATURE_AQUI_SI_SE_REQUIERE",

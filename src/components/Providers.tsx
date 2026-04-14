@@ -12,9 +12,15 @@ import { usePlayerStore, initPlayerStoreSync, initializePlayerSession } from "@/
 import { useEffect } from "react";
 import { audioEngine } from "@/features/player/services/audioEngine";
 import { AppEvents } from './AppEvents';
+import { CapacitorUpdater } from '@capgo/capacitor-updater';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
+    // Notify Capgo Updater that app is ready (success signal for OTA)
+    if (typeof window !== 'undefined') {
+      CapacitorUpdater.notifyAppReady().catch(console.warn);
+    }
+
     // Global sync between native engine and store
     initPlayerStoreSync();
 

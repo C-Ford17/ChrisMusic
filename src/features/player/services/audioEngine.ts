@@ -56,6 +56,7 @@ class AudioEngine {
   private mediaSessionActions: any = null;
   private currentSongTitle = 'ChrisMusic';
   private currentSongId: string | null = null;
+  private currentLoadId = 0;
   public currentUrlSource: 'web' | 'cache' | 'download' | 'youtube' | 'local' | 'unknown' = 'unknown';
 
   private constructor() {
@@ -419,14 +420,22 @@ class AudioEngine {
 
     console.log(`[AudioEngine] Loading song: ${song.title} (${song.id}) from ${localUrl ? 'LOCAL' : 'REMOTE'}`);
     this.loadingSongId = song.id || null;
+    const loadId = ++this.currentLoadId;
 
     try {
       this.currentSongId = song.id || null;
       await this.reset();
+      
+      // Safety check after reset
+      if (this.currentLoadId !== loadId) {
+        console.log(`[AudioEngine] [#${loadId}] Request abandoned during reset`);
+        return;
+      }
+
       this.currentSongTitle = song.title;
 
       if (YouTubeExtractionService.isAndroid()) {
-        await this.loadSongExoPlayer(song, startSeconds, autoplay, localUrl);
+        await this.loadSongExoPlayer(song, startSeconds, autoplay, localUrl, loadId);
         return;
       }
 
@@ -436,17 +445,23 @@ class AudioEngine {
       if (!src && song.id) {
         try {
           src = await youtubeExtractionService.getStreamUrl(song.id);
+          if (this.currentLoadId !== loadId) return;
         } catch (e) {
           console.error('[AudioEngine] Web stream extraction failed:', e);
         }
       }
 
       if (src && this.htmlPlayer) {
+        if (this.currentLoadId !== loadId) return;
         this.htmlPlayer.src = src;
         this.htmlPlayer.load();
 
         const onCanPlay = () => {
           if (this.htmlPlayer) {
+            if (this.currentLoadId !== loadId) {
+              this.htmlPlayer.removeEventListener('canplay', onCanPlay);
+              return;
+            }
             this.htmlPlayer.currentTime = startSeconds;
             if (autoplay) this.play();
             this.updateMediaSessionPosition();
@@ -457,7 +472,9 @@ class AudioEngine {
         this.setWebMediaSession(song, autoplay);
       }
     } finally {
-      this.loadingSongId = null;
+      if (this.currentLoadId === loadId) {
+        this.loadingSongId = null;
+      }
     }
   }
 
@@ -467,7 +484,8 @@ class AudioEngine {
     song: { id?: string; title: string; artistName: string; thumbnailUrl?: string; streamUrl?: string },
     startSeconds: number,
     autoplay: boolean,
-    localUrl?: string
+    localUrl?: string,
+    loadId?: number
   ) {
     const url = localUrl || song.streamUrl;
 
@@ -481,6 +499,13 @@ class AudioEngine {
 
       try {
         await this.callExoLoad(url, song.title, song.artistName, song.thumbnailUrl, song.id);
+        
+        if (loadId && this.currentLoadId !== loadId) {
+           console.log(`[AudioEngine] [#${loadId}] Offline song loaded but request is stale. Stop.`);
+           await ExoPlayerNative.stop();
+           return;
+        }
+
         if (startSeconds > 0) this.seekTo(startSeconds);
         if (!autoplay) await ExoPlayerNative.pause();
       } finally {
@@ -506,15 +531,27 @@ class AudioEngine {
       this.emit(STATE.LOADING); // Immediate feedback
 
       const result = await YouTubeNative.getStreamUrl({ videoId: song.id });
+      
+      if (loadId && this.currentLoadId !== loadId) {
+        console.log(`[AudioEngine] [#${loadId}] Extraction finished but song was changed. Aborting.`);
+        return;
+      }
+
       const streamUrl = result?.url;
 
       if (!streamUrl) {
         throw new Error('yt-dlp returned empty URL');
       }
 
-      console.log('[AudioEngine] Got stream URL, handing off to ExoPlayer');
+      console.log(`[AudioEngine] [#${loadId}] Got stream URL, handing off to ExoPlayer`);
       await this.callExoLoad(streamUrl, song.title, song.artistName, song.thumbnailUrl);
       
+      if (loadId && this.currentLoadId !== loadId) {
+        console.log(`[AudioEngine] [#${loadId}] Stale request after actual load call. Stopping.`);
+        await ExoPlayerNative.stop();
+        return;
+      }
+
       if (startSeconds > 0) this.seekTo(startSeconds);
       if (!autoplay) {
         await ExoPlayerNative.pause();

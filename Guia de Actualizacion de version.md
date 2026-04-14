@@ -29,15 +29,34 @@ Es la versión interna del binario de Rust.
 *   **Campo:** `version = "1.0.1"`
 
 ### 6. El Manifiesto Público (`updater.json`)
-El archivo que subes a GitHub para avisar a todo el mundo.
-*   **Archivo:** `updater.json` (En la raíz de tu repo de GitHub)
-*   **Campo:** `"version": "1.0.1"`
+El archivo que subes a GitHub para avisar a todo el mundo. Ahora incluye versión para Android OTA.
+*   **Archivo:** `updater.json`
+*   **Campos:** 
+    *   `"version": "1.0.2"` (Para cambios Nativos/Tauri)
+    *   `"web_version": "1.0.2"` (Para cambios OTA/Interfaz)
+
+### 7. Paquete de Interfaz OTA (`dist.zip`)
+Si solo hiciste cambios en React/Next (sin tocar Rust o Gradle), puedes generar este archivo para una actualización instantánea.
+*   **Comando:** `npm run build:zip`
+*   **Resultado:** Archivo `dist.zip` en la raíz.
 
 ---
 
 > [!IMPORTANT]
-> **Orden Recomendado:**
-> 1. Modifica los 5 archivos locales (1 al 5).
-> 2. Genera el APK y el instalador MSI/EXE.
-> 3. Súbelos a GitHub Releases.
-> 4. Actualiza el `updater.json` en GitHub con la nueva versión y los nuevos links.
+> **Flujo de Trabajo según el cambio:**
+> 
+> **A. Si es un cambio NATIVO (Escritorio, Audio Engine, Plugins):**
+> 1. Actualiza los 6 puntos anteriores subiendo el número de versión (ej: `1.0.3`).
+> 2. Genera el APK y el instalador de Windows.
+> 3. Sube ambos a GitHub y actualiza `updater.json`.
+> 
+> **B. Si es un cambio Web (UI, CSS, Nuevas pantallas, PlayerStore):**
+> 1. Solo actualiza `package.json` y `updater.json` (`version` y `web_version`).
+> 2. Ejecuta `npm run build:zip`.
+> 3. Sube el `dist.zip` a tu GitHub Release actual (o crea uno nuevo).
+> 4. Los usuarios recibirán el aviso de "Actualización Web" y se instalará sin descargar un APK.
+
+---
+
+> [!TIP]
+> **Live Reload (Desarrollo):** Para ver tus cambios al instante en el móvil, usa tu IP real en `capacitor.config.ts` (ej: `192.168.1.XX`). No uses `[IP_ADDRESS]` ni `localhost`.

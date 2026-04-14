@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { App } from "@capacitor/app";
 import { Capacitor } from "@capacitor/core";
+import { CapacitorUpdater } from "@capgo/capacitor-updater";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -29,15 +30,23 @@ function compareVersions(v1: string, v2: string): number {
   return 0;
 }
 
+interface UpdateInfo {
+  version: string;
+  notes: string;
+  downloadUrl: string;
+  type: 'tauri' | 'android-native' | 'android-ota';
+  updateFn?: () => Promise<void>;
+}
+
 export function UpdaterComponent() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
-  const [updateInfo, setUpdateInfo] = useState<{ version: string; notes: string; downloadUrl: string; isTauri: boolean; updateFn?: () => Promise<void> } | null>(null);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
 
   useEffect(() => {
     async function checkForUpdates() {
       try {
-        const isTauri = !!(window as any).__TAURI_INTERNALS__;
+        const isTauri = typeof window !== 'undefined' && !!(window as any).__TAURI_INTERNALS__;
 
         if (isTauri) {
           // Tauri Desktop check
@@ -49,7 +58,7 @@ export function UpdaterComponent() {
               version: update.version,
               notes: update.body || "Mejoras de rendimiento y UI.",
               downloadUrl: "",
-              isTauri: true,
+              type: 'tauri',
               updateFn: async () => {
                 await update.downloadAndInstall();
                 const { relaunch } = await import("@tauri-apps/plugin-process");
@@ -60,20 +69,41 @@ export function UpdaterComponent() {
         } else if (Capacitor.isNativePlatform()) {
           // Capacitor Android check
           const appInfo = await App.getInfo();
-          const currentVersion = appInfo.version;
+          const nativeVersion = appInfo.version;
 
           const response = await fetch(UPDATER_URL);
           const data = await response.json();
 
-          if (data && data.version && data.platforms?.android?.url) {
-            if (compareVersions(data.version, currentVersion) > 0) {
+          if (data && data.platforms?.android) {
+            const androidData = data.platforms.android;
+
+            // 1. Check for Native Update (APK) - Priority
+            if (compareVersions(data.version, nativeVersion) > 0) {
               setUpdateAvailable(true);
               setUpdateInfo({
                 version: data.version,
-                notes: data.notes || "Mejoras de sistema.",
-                downloadUrl: data.platforms.android.url,
-                isTauri: false,
+                notes: data.notes || "Nueva versión nativa disponible.",
+                downloadUrl: androidData.url,
+                type: 'android-native',
               });
+              return;
+            }
+
+            // 2. Check for Web Update (OTA) via Capgo
+            if (androidData.web_version && androidData.web_url) {
+              const currentWeb = await CapacitorUpdater.getLatest();
+              // If there is no currentWeb.version, we use the build version as baseline
+              const currentWebVersion = currentWeb.version || nativeVersion;
+
+              if (compareVersions(androidData.web_version, currentWebVersion) > 0) {
+                setUpdateAvailable(true);
+                setUpdateInfo({
+                  version: androidData.web_version,
+                  notes: data.notes || "Actualización de interfaz disponible.",
+                  downloadUrl: androidData.web_url,
+                  type: 'android-ota',
+                });
+              }
             }
           }
         }
@@ -82,7 +112,6 @@ export function UpdaterComponent() {
       }
     }
 
-    // Delay check slightly to not block splash screen or initial load
     const timer = setTimeout(checkForUpdates, 3000);
     return () => clearTimeout(timer);
   }, []);
@@ -92,15 +121,24 @@ export function UpdaterComponent() {
     setIsUpdating(true);
 
     try {
-      if (updateInfo.isTauri && updateInfo.updateFn) {
+      if (updateInfo.type === 'tauri' && updateInfo.updateFn) {
         toast.info("Descargando actualización...");
         await updateInfo.updateFn();
+      } else if (updateInfo.type === 'android-ota') {
+        toast.info("Actualizando interfaz...");
+        
+        const bundle = await CapacitorUpdater.download({
+          url: updateInfo.downloadUrl,
+          version: updateInfo.version,
+        });
+
+        toast.success("Interfaz descargada. Reiniciando...");
+        await CapacitorUpdater.set({ id: bundle.id });
+        // The app will reload automatically with the new version
       } else {
-        // Android / Capacitor
+        // Android-Native (APK)
         toast.info("Abriendo descarga en el navegador...");
-        // This will prompt the Android system browser to download the file directly.
         window.open(updateInfo.downloadUrl, "_system");
-        // Give it a moment before hiding modal
         setTimeout(() => setUpdateAvailable(false), 1000);
       }
     } catch (e: any) {
@@ -115,7 +153,7 @@ export function UpdaterComponent() {
         <DialogHeader>
           <DialogTitle className="text-xl">Actualización Disponible</DialogTitle>
           <DialogDescription className="text-zinc-400 mt-2">
-            La versión <span className="font-bold text-white">{updateInfo?.version}</span> ya está disponible para descargar.
+            La versión <span className="font-bold text-white">{updateInfo?.version}</span> {updateInfo?.type === 'android-ota' ? '(Web)' : ''} ya está disponible.
           </DialogDescription>
         </DialogHeader>
         <div className="py-4">
