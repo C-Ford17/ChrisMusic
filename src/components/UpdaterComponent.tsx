@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { App } from "@capacitor/app";
 import { Capacitor } from "@capacitor/core";
 import { CapacitorUpdater } from "@capgo/capacitor-updater";
+import { SplashScreen } from "@capacitor/splash-screen";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -40,6 +41,9 @@ interface UpdateInfo {
   type: 'tauri' | 'android-native' | 'android-ota';
   updateFn?: () => Promise<void>;
 }
+
+// Esta versión debe coincidir con la de package.json cada vez que hagas un build nativo
+const APP_CODE_VERSION = "1.0.3";
 
 export function UpdaterComponent() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
@@ -85,8 +89,13 @@ export function UpdaterComponent() {
 
           if (data && data.platforms?.android) {
             const androidData = data.platforms.android;
-            const currentWeb = await CapacitorUpdater.getLatest();
-            const webVersion = currentWeb.version || nativeVersion;
+            
+            // Prioridad de detección de versión actual:
+            // 1. Memoria LocalStorage (si ya hubo una actualización OTA exitosa)
+            // 2. APP_CODE_VERSION (la versión del código que estamos compilando)
+            // 3. nativeVersion (lo que dice el APK)
+            const savedWebVersion = localStorage.getItem('current_web_version');
+            const currentWebVersion = savedWebVersion || APP_CODE_VERSION || nativeVersion;
 
             // 1. Check for Native Update (APK) - Priority
             if (compareVersions(data.version, nativeVersion) > 0) {
@@ -94,7 +103,7 @@ export function UpdaterComponent() {
               setUpdateInfo({
                 version: data.version,
                 currentNative: nativeVersion,
-                currentWeb: webVersion,
+                currentWeb: currentWebVersion,
                 notes: data.notes || "Nueva versión nativa disponible.",
                 downloadUrl: androidData.url,
                 type: 'android-native',
@@ -102,14 +111,14 @@ export function UpdaterComponent() {
               return;
             }
 
-            // 2. Check for Web Update (OTA) via Capgo
+            // 2. Check for Web Update (OTA) via GitHub
             if (androidData.web_version && androidData.web_url) {
-              if (compareVersions(androidData.web_version, webVersion) > 0) {
+              if (compareVersions(androidData.web_version, currentWebVersion) > 0) {
                 setUpdateAvailable(true);
                 setUpdateInfo({
                   version: androidData.web_version,
                   currentNative: nativeVersion,
-                  currentWeb: webVersion,
+                  currentWeb: currentWebVersion,
                   notes: data.notes || "Nueva actualización de interfaz (OTA).",
                   downloadUrl: androidData.web_url,
                   type: 'android-ota',
@@ -154,7 +163,19 @@ export function UpdaterComponent() {
           version: updateInfo.version,
         });
 
+        // Guardar la versión en memoria antes de aplicar
+        localStorage.setItem('current_web_version', updateInfo.version);
+
         toast.success("¡Interfaz actualizada! Reiniciando...");
+        
+        // Activar Splash nativo para ocultar el recargo de archivos
+        if (Capacitor.isNativePlatform()) {
+           await SplashScreen.show({
+            showDuration: 5000,
+            autoHide: true
+           });
+        }
+        
         await CapacitorUpdater.set({ id: bundle.id });
       } else {
         // Android-Native (APK)

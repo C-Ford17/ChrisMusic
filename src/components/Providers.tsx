@@ -13,12 +13,18 @@ import { useEffect } from "react";
 import { audioEngine } from "@/features/player/services/audioEngine";
 import { AppEvents } from './AppEvents';
 import { CapacitorUpdater } from '@capgo/capacitor-updater';
+import { SplashScreen } from '@capacitor/splash-screen';
+import { Capacitor } from '@capacitor/core';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Notify Capgo Updater that app is ready (success signal for OTA)
     if (typeof window !== 'undefined') {
       CapacitorUpdater.notifyAppReady().catch(console.warn);
+      
+      if (Capacitor.isNativePlatform()) {
+        SplashScreen.hide().catch(console.warn);
+      }
     }
 
     // Global sync between native engine and store
