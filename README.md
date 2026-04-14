@@ -2,7 +2,7 @@
 
 **ChrisMusic** is a high-performance, premium music streaming web application built with the latest technologies. Designed for a seamless, distraction-free listening experience, it focuses on performance, aesthetics, and privacy.
 
-![ChrisMusic Screenshot](https://raw.githubusercontent.com/C-Ford17/ChrisMusic/main/public/screenshot.png) *(Note: Add a real screenshot here)*
+![ChrisMusic Screenshot](screenshot.png)
 
 ## ✨ Key Features
 
