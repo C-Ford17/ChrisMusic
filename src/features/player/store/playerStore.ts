@@ -34,6 +34,7 @@ interface PlayerState {
 
   // Actions
   toggleDownload: (song: Song) => Promise<void>;
+  downloadMultiple: (songs: Song[]) => Promise<void>;
   toggleShuffle: () => void;
   toggleRepeatMode: () => void;
   playSong: (song: Song, startSeconds?: number) => void;
@@ -112,6 +113,56 @@ export const usePlayerStore = create<PlayerState>()(
           }, 500);
         }
       },
+
+      downloadMultiple: async (songs: Song[]) => {
+        const { downloadingSongs } = get();
+        const toDownload: Song[] = [];
+        
+        // Find which songs are not downloaded and not currently downloading
+        for (const song of songs) {
+          if (!downloadingSongs.has(song.id)) {
+            if (!(await offlineService.isDownloaded(song.id))) {
+              toDownload.push(song);
+            }
+          }
+        }
+
+        if (toDownload.length === 0) {
+          toast.info('Todas las canciones ya están descargadas');
+          return;
+        }
+
+        toast.info(`Iniciando descarga de ${toDownload.length} canciones...`);
+
+        // Add all to downloading status immediately so UI updates
+        const newDownloading = new Set(get().downloadingSongs);
+        toDownload.forEach(s => newDownloading.add(s.id));
+        set({ downloadingSongs: newDownloading });
+
+        // Background download loop
+        let successCount = 0;
+        for (const song of toDownload) {
+          try {
+            await offlineService.downloadSong(song);
+            successCount++;
+          } catch (error) {
+            console.error(error);
+            toast.error(`Error al descargar: ${song.title}`);
+          } finally {
+            // Remove from downloading status one by one as they finish
+            setTimeout(() => {
+              const nextSet = new Set(get().downloadingSongs);
+              nextSet.delete(song.id);
+              set({ downloadingSongs: nextSet });
+            }, 100);
+          }
+        }
+        
+        if (successCount > 0) {
+          toast.success(`Se descargaron ${successCount} canciones correctamente`);
+        }
+      },
+
 
       toggleShuffle: () => {
         const nextShuffle = !get().isShuffle;

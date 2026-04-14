@@ -18,7 +18,7 @@ export default function LibraryPage() {
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   
-  const { playSongInQueue, toggleDownload } = usePlayerStore();
+  const { playSongInQueue, toggleDownload, downloadMultiple } = usePlayerStore();
 
   const favorites = useLiveQuery(() => db.favorites.orderBy('addedAt').reverse().toArray(), []) || [];
   const history = useLiveQuery(() => db.history.orderBy('playedAt').reverse().toArray(), []) || [];
@@ -142,6 +142,16 @@ export default function LibraryPage() {
 
       {activeTab === 'favorites' && (
         <div className="flex flex-col gap-3">
+          {favorites.length > 0 && (
+            <div className="flex justify-end mb-2">
+              <button 
+                onClick={() => downloadMultiple(favorites.map(f => f.song as Song))}
+                className="flex items-center gap-2 px-4 py-2 bg-black/5 dark:bg-white/5 text-black dark:text-white hover:bg-[var(--accent-primary)] hover:text-white rounded-full text-xs font-bold uppercase tracking-wider transition-all"
+              >
+                <Download size={16} /> Descargar Todas
+              </button>
+            </div>
+          )}
           {favorites.length === 0 ? (
             <div className="flex flex-col items-center justify-center text-center py-32 opacity-20">
               <Heart size={80} className="mb-6" />
