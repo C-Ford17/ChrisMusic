@@ -43,7 +43,7 @@ interface UpdateInfo {
 }
 
 // Esta versión debe coincidir con la de package.json cada vez que hagas un build nativo
-const APP_CODE_VERSION = "1.0.5";
+const APP_CODE_VERSION = "1.0.6";
 
 export function UpdaterComponent() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
