@@ -2,7 +2,7 @@
 
 **ChrisMusic** is a high-performance, premium music streaming web application built with the latest technologies. Designed for a seamless, distraction-free listening experience, it focuses on performance, aesthetics, and privacy.
 
-![ChrisMusic Screenshot](https://raw.githubusercontent.com/Christian/ChrisMusic/main/public/screenshot.png) *(Note: Add a real screenshot here)*
+![ChrisMusic Screenshot](https://raw.githubusercontent.com/C-Ford17/ChrisMusic/main/public/screenshot.png) *(Note: Add a real screenshot here)*
 
 ## ✨ Key Features
 
@@ -29,7 +29,7 @@
 
 1.  **Clone the repository**:
     ```bash
-    git clone https://github.com/Christian/ChrisMusic.git
+    git clone https://github.com/C-Ford17/ChrisMusic.git
     cd ChrisMusic
     ```
 

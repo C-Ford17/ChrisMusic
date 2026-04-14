@@ -579,13 +579,13 @@ export default function SettingsPage() {
                 <Info size={24} />
               </div>
               <div>
-                <p className="font-black text-black/80 dark:text-white/90">Versión 0.6.0-stable</p>
-                <p className="text-sm font-bold text-black/30 dark:text-white/40 mt-0.5">Sprint 6 • ChrisMusic Premium</p>
+                <p className="font-black text-black/80 dark:text-white/90">Versión 1.0.0-stable</p>
+                <p className="text-sm font-bold text-black/30 dark:text-white/40 mt-0.5">Lanzamiento Oficial • ChrisMusic Premium</p>
               </div>
             </div>
 
             <a 
-              href="https://github.com/Christian/ChrisMusic" 
+              href="https://github.com/C-Ford17/ChrisMusic" 
               target="_blank" 
               className="w-full flex items-center justify-between p-8 hover:bg-white dark:hover:bg-white/2 transition-all text-left border-t border-black/5 dark:border-white/5 group"
             >
