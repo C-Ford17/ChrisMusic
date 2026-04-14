@@ -133,6 +133,11 @@ export function PlayerOverlay() {
   const [formats, setFormats] = useState<any[]>([]);
   const [loadingFormats, setLoadingFormats] = useState(false);
   const [showFormats, setShowFormats] = useState(false);
+  const [thumbError, setThumbError] = useState(false);
+
+  useEffect(() => {
+    setThumbError(false); // Reset al cambiar de canción
+  }, [currentSong?.id]);
 
   const loadFormats = async () => {
     if (!currentSong) return;
@@ -321,11 +326,15 @@ export function PlayerOverlay() {
                   className="absolute inset-0 transition-all duration-1000"
                 >
                   <Image 
-                    src={YouTubeExtractionService.getHighResThumbnail(currentSong.id, YouTubeExtractionService.normalizeUrl(currentSong.thumbnailUrl))}
+                    src={thumbError 
+                      ? YouTubeExtractionService.normalizeUrl(currentSong.thumbnailUrl)
+                      : YouTubeExtractionService.getHighResThumbnail(currentSong.id, YouTubeExtractionService.normalizeUrl(currentSong.thumbnailUrl))
+                    }
                     alt="" 
                     fill 
                     className="object-cover object-center"
                     priority
+                    onError={() => setThumbError(true)}
                   />
                 </motion.div>
                 {/* Degradados de legibilidad: Muy suaves */}
@@ -337,13 +346,36 @@ export function PlayerOverlay() {
             <div className="w-full h-full flex flex-col relative z-20">
               
               {/* Header: Totalmente transparente */}
-              <div className="flex items-center justify-between p-6 px-8 pt-safe">
-                <button onClick={() => setIsNowPlayingOpen(false)} className="p-2 -ml-2 text-white/70 hover:text-white transition-colors"><ChevronDown size={32} /></button>
-                <span className="text-[10px] font-black tracking-[0.4em] text-white/90 uppercase drop-shadow-lg">Reproduciendo</span>
-                <button onClick={() => setShowTimerModal(true)} className={`p-2 rounded-xl transition-all ${isShutdownTimerActive ? 'bg-[var(--accent-primary)]/40 text-white' : 'text-white/70 hover:text-white'}`}>
-                  <Timer size={24} />
-                </button>
-              </div>
+                <div className="flex items-center justify-between p-6 px-8 pt-safe">
+                  <button onClick={() => setIsNowPlayingOpen(false)} className="p-2 -ml-2 text-white/70 hover:text-white transition-colors"><ChevronDown size={32} /></button>
+                  <div className="flex flex-col items-center">
+                    <span className="text-[10px] font-black tracking-[0.4em] text-white/90 uppercase drop-shadow-lg">Reproduciendo</span>
+                    {isDebugMode && (
+                      <span className="text-[8px] font-mono text-[var(--accent-primary)] mt-1 bg-black/40 px-2 py-0.5 rounded-full">DEBUG ON • {currentSong.id}</span>
+                    )}
+                  </div>
+                  <button onClick={() => setShowTimerModal(true)} className={`p-2 rounded-xl transition-all ${isShutdownTimerActive ? 'bg-[var(--accent-primary)]/40 text-white' : 'text-white/70 hover:text-white'}`}>
+                    <Timer size={24} />
+                  </button>
+                </div>
+
+                {isDebugMode && (
+                  <motion.div 
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className="absolute top-24 left-6 z-[100] p-4 bg-black/60 backdrop-blur-3xl rounded-3xl border border-white/10 text-[10px] font-mono text-white/80 space-y-2 pointer-events-none"
+                  >
+                    <p className="font-black text-[var(--accent-primary)]">SISTEMA INFO</p>
+                    <p>ID: {currentSong.id}</p>
+                    <p>TYPE: {currentSong.isOffline ? 'OFFLINE' : 'STREAM'}</p>
+                    <p>FMT: {currentSong.audioUrl?.includes('.aac') ? 'AAC' : 'DASH/HLS'}</p>
+                    <p>STATE: {isPlaying ? 'PLAYING' : 'PAUSED'}</p>
+                    <div className="flex gap-2 mt-2">
+                       <button className="px-2 py-1 bg-white/10 rounded-md pointer-events-auto" onClick={inspectLocalBlob}>BLOB HEX</button>
+                       <button className="px-2 py-1 bg-white/10 rounded-md pointer-events-auto" onClick={loadFormats}>FORMATS</button>
+                    </div>
+                  </motion.div>
+                )}
 
               <div className="flex-1 flex flex-col px-4 md:px-0 py-2 sm:py-6 overflow-hidden relative">
                 

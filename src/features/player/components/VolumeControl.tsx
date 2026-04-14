@@ -43,12 +43,22 @@ export function VolumeControl({ className = "", isVertical = false }: { classNam
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showVerticalSlider]);
 
+  const handleSliderClick = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+    if (!sliderRef.current) return;
+    const rect = sliderRef.current.getBoundingClientRect();
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    const offsetY = clientY - rect.top;
+    const height = rect.height;
+    // Invertimos el cálculo: (altura - offset) / altura porque el 0 de clientY es arriba
+    const newVolume = Math.max(0, Math.min(1, (height - offsetY) / height));
+    setVolume(newVolume);
+  };
+
   return (
     <div 
       className={`relative flex items-center group ${className}`}
       onMouseEnter={() => !isVertical && setIsHovered(true)}
       onMouseLeave={() => !isVertical && setIsHovered(false)}
-      ref={sliderRef}
     >
       <button 
         onClick={() => {
@@ -70,26 +80,22 @@ export function VolumeControl({ className = "", isVertical = false }: { classNam
             initial={{ opacity: 0, scale: 0.9, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 10 }}
-            className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 p-4 bg-black/60 backdrop-blur-3xl border border-white/10 rounded-2xl shadow-2xl z-50 flex flex-col items-center gap-4 h-48 w-12"
+            className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 p-4 bg-black/80 backdrop-blur-3xl border border-white/10 rounded-2xl shadow-2xl z-50 flex flex-col items-center gap-4 h-52 w-14"
+            ref={sliderRef}
           >
-            <div className="flex-1 w-1.5 bg-white/10 rounded-full relative overflow-hidden flex items-end">
+            <div 
+              className="flex-1 w-2 bg-white/10 rounded-full relative cursor-pointer overflow-hidden flex items-end"
+              onClick={handleSliderClick}
+              onTouchStart={handleSliderClick}
+              onTouchMove={handleSliderClick}
+            >
               <motion.div 
                 className="w-full bg-[var(--accent-primary)] shadow-[0_0_15px_var(--accent-primary)]"
                 style={{ height: `${volume * 100}%` }}
                 layoutId="volume-bar"
               />
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value={volume}
-                onChange={(e) => setVolume(parseFloat(e.target.value))}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer [writing-mode:bt-lr] -rotate-180"
-                style={{ appearance: 'slider-vertical' } as any}
-              />
             </div>
-            <span className="text-[10px] font-black text-white/50">{Math.round(volume * 100)}%</span>
+            <span className="text-[10px] font-black text-white/50 w-full text-center">{Math.round(volume * 100)}%</span>
           </motion.div>
         )}
       </AnimatePresence>
