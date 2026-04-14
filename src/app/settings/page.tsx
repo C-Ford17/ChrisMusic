@@ -12,6 +12,7 @@ import { LibraryService } from '@/features/library/services/libraryService';
 import { useSettingsStore, type AudioQuality, type ThemeMode } from '@/features/settings/store/settingsStore';
 import { useTheme } from 'next-themes';
 import { toast } from 'sonner';
+import packageJson from '../../../package.json';
 import { InstallButton } from '@/components/InstallButton';
 import { db } from '@/core/db/db';
 import { Capacitor } from '@capacitor/core';
@@ -579,7 +580,7 @@ export default function SettingsPage() {
                 <Info size={24} />
               </div>
               <div>
-                <p className="font-black text-black/80 dark:text-white/90">Versión 1.0.3-stable</p>
+                <p className="font-black text-black/80 dark:text-white/90">Versión {packageJson.version}-stable</p>
                 <p className="text-sm font-bold text-black/30 dark:text-white/40 mt-0.5">Lanzamiento Oficial • ChrisMusic Premium</p>
               </div>
             </div>
