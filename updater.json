@@ -1,5 +1,6 @@
 {
-  "version": "1.0.7",
+  "version": "1.0.2",
+  "tauri_version": "1.0.7",
   "notes": "v1.0.7: Fix de volumen, build de tauri corregido y sistema de reinstalación forzada",
   "pub_date": "2026-04-14T00:00:00Z",
   "platforms": {
