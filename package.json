@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start -p ${PORT:-3000}",
     "android": "next build && npx cap sync && npx cap open android",
-    "build:zip": "next build && powershell.exe -Command \"Compress-Archive -Path out\\* -DestinationPath dist.zip -Force\"",
+    "build:zip": "next build && powershell.exe -Command \"$src = Get-ChildItem -Path out -Force; Compress-Archive -Path $src.FullName -DestinationPath dist.zip -Force\"",
     "lint": "eslint",
     "tauri": "tauri"
   },
