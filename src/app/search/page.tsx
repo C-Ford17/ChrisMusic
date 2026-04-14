@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { usePlayerStore } from '@/features/player/store/playerStore';
-import { Search, Plus, ListPlus, Music, Clock, Trash2, Download, Check, Loader2, ArrowUpLeft, X } from 'lucide-react';
+import { Search, Plus, ListPlus, Music, Clock, Trash2, Download, Check, Loader2, ArrowUpLeft, X, Heart } from 'lucide-react';
 import { toast } from 'sonner';
 import Image from 'next/image';
 import { type Song } from '@/core/types/music';
@@ -34,6 +34,14 @@ export default function SearchPage() {
     () => db.searchHistory.orderBy('timestamp').reverse().limit(10).toArray(),
     []
   );
+
+  const favoriteIds = useLiveQuery(
+    async () => {
+      const all = await db.favorites.toArray();
+      return new Set(all.map(s => s.id));
+    },
+    []
+  ) || new Set<string>();
 
   const downloadedIds = useLiveQuery(
     async () => {
@@ -240,6 +248,7 @@ export default function SearchPage() {
             {results.map((song) => {
               const isDownloaded = downloadedIds.has(song.id);
               const isDownloading = downloadingSongs.has(song.id);
+              const isFavorite = favoriteIds.has(song.id);
               return (
                 <div
                   key={song.id}
@@ -272,10 +281,10 @@ export default function SearchPage() {
                   <div className="flex items-center justify-between mt-4 pt-4 border-t border-black/5 dark:border-white/5">
                     <div className="flex gap-1">
                       <button
-                        onClick={(e) => { e.stopPropagation(); addToQueue(song); toast.success('A la cola', { description: song.title }); }}
-                        className="w-10 h-10 flex items-center justify-center bg-black/5 dark:bg-white/5 text-gray-500 hover:text-black dark:hover:text-white hover:bg-black/10 dark:hover:bg-white/10 rounded-full transition-all"
+                        onClick={(e) => { e.stopPropagation(); LibraryService.toggleFavorite(song); }}
+                        className="w-10 h-10 flex items-center justify-center bg-black/5 dark:bg-white/5 text-gray-500 hover:bg-[var(--accent-primary)]/10 rounded-full transition-all"
                       >
-                        <Plus size={20} />
+                        <Heart size={20} fill={isFavorite ? "var(--accent-primary)" : "none"} className={isFavorite ? "text-[var(--accent-primary)]" : "text-gray-400"} />
                       </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); setSelectedSong(song); setIsModalOpen(true); }}

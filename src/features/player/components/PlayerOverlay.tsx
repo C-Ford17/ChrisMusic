@@ -422,6 +422,8 @@ export function PlayerOverlay() {
                        <ListMusic size={24} />
                      </button>
 
+                     <VolumeControl isVertical={true} />
+
                      <button 
                          onClick={(e) => { e.stopPropagation(); toggleDownload(currentSong); }}
                          disabled={isDownloading}

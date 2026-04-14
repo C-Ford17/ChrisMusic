@@ -5,8 +5,8 @@
   "platforms": {
     "android": {
       "url": "https://github.com/C-Ford17/ChrisMusic/releases/download/1.0.2/chrismusic-1.0.2.apk",
-      "web_version": "1.0.4",
-      "web_url": "https://github.com/C-Ford17/ChrisMusic/releases/download/1.0.4/dist.zip"
+      "web_version": "1.0.5",
+      "web_url": "https://github.com/C-Ford17/ChrisMusic/releases/download/1.0.5/dist.zip"
     },
     "windows-x86_64": {
       "signature": "SIGNATURE_AQUI_SI_SE_REQUIERE",
