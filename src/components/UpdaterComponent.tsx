@@ -19,8 +19,9 @@ import { Button } from "@/components/ui/button";
 const UPDATER_URL = "https://raw.githubusercontent.com/C-Ford17/ChrisMusic/main/updater.json";
 
 function compareVersions(v1: string, v2: string): number {
-  const parts1 = v1.replace("v", "").split(".").map(Number);
-  const parts2 = v2.replace("v", "").split(".").map(Number);
+  const clean = (v: string) => (v || "0").replace(/^v/, "").split('-')[0].split(".").map(n => parseInt(n, 10) || 0);
+  const parts1 = clean(v1);
+  const parts2 = clean(v2);
   for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
     const p1 = parts1[i] || 0;
     const p2 = parts2[i] || 0;
@@ -32,6 +33,8 @@ function compareVersions(v1: string, v2: string): number {
 
 interface UpdateInfo {
   version: string;
+  currentNative: string;
+  currentWeb: string;
   notes: string;
   downloadUrl: string;
   type: 'tauri' | 'android-native' | 'android-ota';
@@ -56,6 +59,8 @@ export function UpdaterComponent() {
             setUpdateAvailable(true);
             setUpdateInfo({
               version: update.version,
+              currentNative: "Desktop",
+              currentWeb: "Desktop",
               notes: update.body || "Mejoras de rendimiento y UI.",
               downloadUrl: "",
               type: 'tauri',
@@ -76,12 +81,16 @@ export function UpdaterComponent() {
 
           if (data && data.platforms?.android) {
             const androidData = data.platforms.android;
+            const currentWeb = await CapacitorUpdater.getLatest();
+            const webVersion = currentWeb.version || nativeVersion;
 
             // 1. Check for Native Update (APK) - Priority
             if (compareVersions(data.version, nativeVersion) > 0) {
               setUpdateAvailable(true);
               setUpdateInfo({
                 version: data.version,
+                currentNative: nativeVersion,
+                currentWeb: webVersion,
                 notes: data.notes || "Nueva versión nativa disponible.",
                 downloadUrl: androidData.url,
                 type: 'android-native',
@@ -91,15 +100,13 @@ export function UpdaterComponent() {
 
             // 2. Check for Web Update (OTA) via Capgo
             if (androidData.web_version && androidData.web_url) {
-              const currentWeb = await CapacitorUpdater.getLatest();
-              // If there is no currentWeb.version, we use the build version as baseline
-              const currentWebVersion = currentWeb.version || nativeVersion;
-
-              if (compareVersions(androidData.web_version, currentWebVersion) > 0) {
+              if (compareVersions(androidData.web_version, webVersion) > 0) {
                 setUpdateAvailable(true);
                 setUpdateInfo({
                   version: androidData.web_version,
-                  notes: data.notes || "Actualización de interfaz disponible.",
+                  currentNative: nativeVersion,
+                  currentWeb: webVersion,
+                  notes: data.notes || "Nueva actualización de interfaz (OTA).",
                   downloadUrl: androidData.web_url,
                   type: 'android-ota',
                 });
@@ -125,38 +132,47 @@ export function UpdaterComponent() {
         toast.info("Descargando actualización...");
         await updateInfo.updateFn();
       } else if (updateInfo.type === 'android-ota') {
-        toast.info("Actualizando interfaz...");
+        toast.info("Descargando interfaz web...");
         
         const bundle = await CapacitorUpdater.download({
           url: updateInfo.downloadUrl,
           version: updateInfo.version,
         });
 
-        toast.success("Interfaz descargada. Reiniciando...");
+        toast.success("¡Interfaz actualizada! Reiniciando...");
         await CapacitorUpdater.set({ id: bundle.id });
-        // The app will reload automatically with the new version
       } else {
         // Android-Native (APK)
-        toast.info("Abriendo descarga en el navegador...");
+        toast.info("Abriendo descarga de APK...");
         window.open(updateInfo.downloadUrl, "_system");
         setTimeout(() => setUpdateAvailable(false), 1000);
       }
     } catch (e: any) {
-      toast.error(`Error actualizando: ${e.message}`);
+      toast.error(`Error: ${e.message}`);
       setIsUpdating(false);
     }
   };
 
   return (
     <Dialog open={updateAvailable} onOpenChange={setUpdateAvailable}>
-      <DialogContent className="sm:max-w-[425px] rounded-2xl bg-zinc-900 border-zinc-800 text-white">
+      <DialogContent className="sm:max-w-[425px] rounded-2xl bg-zinc-900 border-zinc-800 text-white shadow-2xl">
         <DialogHeader>
-          <DialogTitle className="text-xl">Actualización Disponible</DialogTitle>
+          <DialogTitle className="text-xl flex items-center gap-2">
+            {updateInfo?.type === 'android-ota' ? "Mejora de Interfaz" : "Actualización de App"}
+          </DialogTitle>
           <DialogDescription className="text-zinc-400 mt-2">
-            La versión <span className="font-bold text-white">{updateInfo?.version}</span> {updateInfo?.type === 'android-ota' ? '(Web)' : ''} ya está disponible.
+            Versión <span className="font-bold text-white">{updateInfo?.version}</span> disponible.
+            {updateInfo?.type === 'android-ota' && " (Instalación instantánea)"}
           </DialogDescription>
         </DialogHeader>
-        <div className="py-4">
+        <div className="py-2 space-y-3">
+          <div className="bg-white/5 rounded-xl p-3 border border-white/5">
+             <p className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-1">Tu versión actual</p>
+             <div className="flex justify-between text-xs font-mono">
+                <span className="text-zinc-400">Nativa: {updateInfo?.currentNative}</span>
+                <span className="text-zinc-400">Web: {updateInfo?.currentWeb}</span>
+             </div>
+          </div>
           <p className="text-sm text-zinc-300">
             {updateInfo?.notes}
           </p>
@@ -175,7 +191,7 @@ export function UpdaterComponent() {
             className="bg-green-500 hover:bg-green-600 text-black font-semibold rounded-full px-6"
             disabled={isUpdating}
           >
-            {isUpdating ? "Actualizando..." : "Actualizar Ahora"}
+            {isUpdating ? "Cargando..." : (updateInfo?.type === 'android-ota' ? "Actualizar Ahora" : "Descargar APK")}
           </Button>
         </DialogFooter>
       </DialogContent>
