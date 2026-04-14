@@ -5,7 +5,7 @@ import {
   Info, ShieldCheck, Github, ExternalLink,
   Moon, Sun, Monitor, PlayCircle, Music2,
   HardDrive, Sparkles, WifiOff, Bug, DatabaseZap,
-  Check
+  Check, RefreshCw, ChevronRight
 } from 'lucide-react';
 import Link from 'next/link';
 import { LibraryService } from '@/features/library/services/libraryService';
@@ -579,10 +579,26 @@ export default function SettingsPage() {
                 <Info size={24} />
               </div>
               <div>
-                <p className="font-black text-black/80 dark:text-white/90">Versión 1.0.2-stable</p>
+                <p className="font-black text-black/80 dark:text-white/90">Versión 1.0.3-stable</p>
                 <p className="text-sm font-bold text-black/30 dark:text-white/40 mt-0.5">Lanzamiento Oficial • ChrisMusic Premium</p>
               </div>
             </div>
+
+            <button 
+              onClick={() => window.dispatchEvent(new CustomEvent('check-for-updates'))}
+              className="w-full flex items-center justify-between p-8 hover:bg-white dark:hover:bg-white/2 transition-all text-left border-t border-black/5 dark:border-white/5 group"
+            >
+              <div className="flex items-center gap-5">
+                <div className="p-4 bg-green-500/10 text-green-500 rounded-2xl group-hover:bg-green-500 group-hover:text-white transition-all">
+                  <RefreshCw size={16} />
+                </div>
+                <div>
+                  <p className="font-black text-black/80 dark:text-white/90 uppercase tracking-tighter text-sm">Buscar Actualizaciones</p>
+                  <p className="text-[10px] font-bold text-black/30 dark:text-white/40 mt-0.5 uppercase tracking-widest">Forzar verificación OTA</p>
+                </div>
+              </div>
+              <ChevronRight size={18} className="text-zinc-600 group-hover:translate-x-1 transition-transform" />
+            </button>
 
             <a 
               href="https://github.com/C-Ford17/ChrisMusic" 

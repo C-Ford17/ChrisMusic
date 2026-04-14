@@ -47,8 +47,9 @@ export function UpdaterComponent() {
   const [isUpdating, setIsUpdating] = useState(false);
 
   useEffect(() => {
-    async function checkForUpdates() {
+    async function checkForUpdates(isManual = false) {
       try {
+        if (isManual) toast.info("Buscando actualizaciones...");
         const isTauri = typeof window !== 'undefined' && !!(window as any).__TAURI_INTERNALS__;
 
         if (isTauri) {
@@ -70,13 +71,16 @@ export function UpdaterComponent() {
                 await relaunch();
               }
             });
+          } else if (isManual) {
+            toast.success("Estás en la última versión.");
           }
         } else if (Capacitor.isNativePlatform()) {
           // Capacitor Android check
           const appInfo = await App.getInfo();
           const nativeVersion = appInfo.version;
 
-          const response = await fetch(UPDATER_URL);
+          // Add timestamp to bypass GitHub cache
+          const response = await fetch(`${UPDATER_URL}?t=${Date.now()}`);
           const data = await response.json();
 
           if (data && data.platforms?.android) {
@@ -110,17 +114,28 @@ export function UpdaterComponent() {
                   downloadUrl: androidData.web_url,
                   type: 'android-ota',
                 });
+                return;
               }
             }
+            
+            if (isManual) toast.success("Estás en la última versión.");
           }
         }
       } catch (error) {
         console.error("Failed to check for updates:", error);
+        if (isManual) toast.error("Error al buscar actualizaciones.");
       }
     }
 
-    const timer = setTimeout(checkForUpdates, 3000);
-    return () => clearTimeout(timer);
+    // Listen for manual trigger
+    const handleManualCheck = () => checkForUpdates(true);
+    window.addEventListener('check-for-updates', handleManualCheck);
+
+    const timer = setTimeout(() => checkForUpdates(false), 3000);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('check-for-updates', handleManualCheck);
+    };
   }, []);
 
   const handleUpdate = async () => {
