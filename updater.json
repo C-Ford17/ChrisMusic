@@ -1,14 +1,14 @@
 {
-  "version": "1.0.0",
-  "notes": "Primera version de la app",
+  "version": "1.0.1",
+  "notes": "fix de versiones",
   "pub_date": "2026-04-14T00:00:00Z",
   "platforms": {
     "android": {
-      "url": "https://github.com/C-Ford17/chrismusic/releases/download/v1.0.0/chrismusic-v1.0.0.apk"
+      "url": "https://github.com/C-Ford17/chrismusic/releases/download/v1.0.1/chrismusic-v1.0.1.apk"
     },
     "windows-x86_64": {
       "signature": "SIGNATURE_AQUI_SI_SE_REQUIERE",
-      "url": "https://github.com/C-Ford17/chrismusic/releases/download/v1.0.0/ChrisMusic_1.0.0_x64-setup.exe"
+      "url": "https://github.com/C-Ford17/chrismusic/releases/download/v1.0.1/ChrisMusic_1.0.1_x64-setup.exe"
     }
   }
 }
