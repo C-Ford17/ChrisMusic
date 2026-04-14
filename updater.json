@@ -1,12 +1,12 @@
 {
   "version": "1.0.2",
-  "notes": "Feature: Search clear button (OTA Update)",
+  "notes": "Feature: Search clear button (OTA Final Test)",
   "pub_date": "2026-04-14T00:00:00Z",
   "platforms": {
     "android": {
-      "url": "https://github.com/C-Ford17/ChrisMusic/releases/download/1.0.2/chrismusic-v1.0.2.apk",
-      "web_version": "1.0.3",
-      "web_url": "https://github.com/C-Ford17/ChrisMusic/releases/download/1.0.3/dist.zip"
+      "url": "https://github.com/C-Ford17/ChrisMusic/releases/download/1.0.2/chrismusic-1.0.2.apk",
+      "web_version": "1.0.4",
+      "web_url": "https://github.com/C-Ford17/ChrisMusic/releases/download/1.0.4/dist.zip"
     },
     "windows-x86_64": {
       "signature": "SIGNATURE_AQUI_SI_SE_REQUIERE",
