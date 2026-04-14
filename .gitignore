@@ -49,3 +49,7 @@ build_log_utf8.txt
 
 # Text files
 *.txt
+
+# Local Config & OTA
+capacitor.config.local.json
+dist.zip
