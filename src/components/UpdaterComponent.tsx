@@ -87,8 +87,8 @@ export function UpdaterComponent() {
           const response = await fetch(`${UPDATER_URL}?t=${Date.now()}`);
           const data = await response.json();
 
-          if (data && data.platforms?.android) {
-            const androidData = data.platforms.android;
+          if (data && data.android) {
+            const androidData = data.android;
             
             // Prioridad de detección de versión actual:
             // 1. Memoria LocalStorage (si ya hubo una actualización OTA exitosa)
