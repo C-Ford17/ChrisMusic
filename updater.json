@@ -10,15 +10,15 @@
     "android": {
       "version": "1.0.7",
       "url": "https://github.com/C-Ford17/ChrisMusic/releases/download/native-1.0.7/app-release.apk",
-      "web_version": "1.0.8.1",
-      "web_url": "https://github.com/C-Ford17/ChrisMusic/releases/download/1.0.8.1/dist.zip",
+      "web_version": "1.0.9",
+      "web_url": "https://github.com/C-Ford17/ChrisMusic/releases/download/1.0.9/dist.zip",
       "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IGZha2Vfc2lnbmF0dXJlX2Zvcl93aW5kb3dzX2NvbXBhdGliaWxpdHkK"
     }
   },
   "android": {
     "version": "1.0.7",
     "url": "https://github.com/C-Ford17/ChrisMusic/releases/download/native-1.0.7/app-release.apk",
-    "web_version": "1.0.8.1",
+    "web_version": "1.0.9",
     "web_url": "https://github.com/C-Ford17/ChrisMusic/releases/download/1.0.8/dist.zip"
   }
 }
