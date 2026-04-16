@@ -75,8 +75,11 @@ export class OfflineService {
     try {
       const { Filesystem, Directory } = await import('@capacitor/filesystem');
 
-      // Determine extension from MIME type
-      let ext = blob.type.includes('image/') ? 'jpg' : 'aac';
+      // Determine extension from MIME type or fileName prefix hint
+      let ext = 'aac';
+      if (blob.type.includes('image/')) ext = 'jpg';
+      else if (fileName.startsWith('thumb_')) ext = 'jpg'; 
+      else if (blob.type.includes('audio/')) ext = 'aac';
       
       if (blob.type.includes('webm')) ext = 'webm';
       else if (blob.type.includes('ogg')) ext = 'ogg';
@@ -217,7 +220,7 @@ export class OfflineService {
       let audioBlob: Blob;
       let thumbBlob: Blob | undefined;
 
-      // Use local extraction for native apps
+      // Use local extraction for Android native app
       if (YouTubeExtractionService.isAndroid()) {
         console.log('[OfflineService] Android detected. Performing native extraction for:', song.id);
         const [audio, thumb] = await Promise.all([
@@ -226,8 +229,17 @@ export class OfflineService {
         ]);
         audioBlob = audio;
         thumbBlob = thumb;
+      } else if (YouTubeExtractionService.isTauri()) {
+        console.log('[OfflineService] Tauri detected. Fetching stream URL for download:', song.id);
+        const streamUrl = await youtubeExtractionService.getStreamUrl(song.id);
+        const [audio, thumb] = await Promise.all([
+          this.fetchNativeBlob(streamUrl),
+          this.fetchNativeBlob(song.thumbnailUrl).catch(() => undefined)
+        ]);
+        audioBlob = audio;
+        thumbBlob = thumb;
       } else {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://chrismusic-production.up.railway.app";
         const [audio, thumb] = await Promise.all([
           this.fetchNativeBlob(`${apiUrl}/proxy?id=${song.id}`),
           this.fetchNativeBlob(song.thumbnailUrl).catch(() => undefined)
@@ -285,8 +297,16 @@ export class OfflineService {
         ]);
         audioBlob = audio;
         thumbBlob = thumb;
+      } else if (YouTubeExtractionService.isTauri()) {
+        const streamUrl = await youtubeExtractionService.getStreamUrl(song.id);
+        const [audio, thumb] = await Promise.all([
+          this.fetchNativeBlob(streamUrl),
+          this.fetchNativeBlob(song.thumbnailUrl).catch(() => undefined)
+        ]);
+        audioBlob = audio;
+        thumbBlob = thumb;
       } else {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://chrismusic-production.up.railway.app";
         const [audio, thumb] = await Promise.all([
           this.fetchNativeBlob(`${apiUrl}/proxy?id=${song.id}`),
           this.fetchNativeBlob(song.thumbnailUrl).catch(() => undefined)
@@ -402,31 +422,35 @@ export class OfflineService {
       const { Filesystem, Directory } = await import('@capacitor/filesystem');
 
       if (record.thumbnailFilePath && YouTubeExtractionService.isAndroid()) {
-        // Validate existing path
-        if (record.thumbnailFilePath.endsWith('.aac')) {
-          console.warn('[OfflineService] Repairing corrupted thumbnail path (was .aac):', record.thumbnailFilePath);
-          needsRepair = true;
-        } else {
-          // Check if file still exists on disk
-          try {
-            const fileName = record.thumbnailFilePath.split('/').pop() || '';
-            await Filesystem.stat({ path: fileName, directory: Directory.Cache });
-            resolvedSong.thumbnailUrl = record.thumbnailFilePath;
-          } catch (e) {
-            console.warn('[OfflineService] Repairing missing thumbnail file:', record.thumbnailFilePath);
+        const isCorrupted = record.thumbnailFilePath.endsWith('.aac');
+        
+        // Check if file exists and is not corrupted
+        try {
+          const fileName = record.thumbnailFilePath.split('/').pop() || '';
+          await Filesystem.stat({ path: fileName, directory: Directory.Cache });
+          
+          if (isCorrupted) {
+            console.warn('[OfflineService] Corrupted thumbnail extension detected, forcing repair:', record.thumbnailFilePath);
             needsRepair = true;
+          } else {
+            resolvedSong.thumbnailUrl = record.thumbnailFilePath;
           }
+        } catch (e) {
+          console.warn('[OfflineService] Missing thumbnail file or inaccessible path:', record.thumbnailFilePath);
+          needsRepair = true;
         }
       }
 
       if ((!record.thumbnailFilePath || needsRepair) && record.thumbnailBlob) {
         if (YouTubeExtractionService.isAndroid()) {
-          // On Android, we write image to disk cache for notification usage
+          // Re-generate with correct extension derived from updated blobToNativeFileUri logic
           const uri = await this.blobToNativeFileUri(record.thumbnailBlob, `thumb_${song.id}`);
           if (uri) {
+            console.log('[OfflineService] Successfully repaired/generated thumbnail:', uri);
             resolvedSong.thumbnailUrl = uri;
-            if (isCached) await db.cachedSongs.update(song.id, { thumbnailFilePath: uri });
-            else await db.offlineSongs.update(song.id, { thumbnailFilePath: uri });
+            const updateObj = { thumbnailFilePath: uri };
+            if (isCached) await db.cachedSongs.update(song.id, updateObj);
+            else await db.offlineSongs.update(song.id, updateObj);
           }
         } else {
           resolvedSong.thumbnailUrl = URL.createObjectURL(record.thumbnailBlob);

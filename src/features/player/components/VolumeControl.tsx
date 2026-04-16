@@ -81,13 +81,13 @@ export function VolumeControl({ className = "", isVertical = false }: { classNam
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 10 }}
             className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 p-4 bg-black/80 backdrop-blur-3xl border border-white/10 rounded-2xl shadow-2xl z-50 flex flex-col items-center gap-4 h-52 w-14"
-            ref={sliderRef}
           >
             <div 
               className="flex-1 w-2 bg-white/10 rounded-full relative cursor-pointer overflow-hidden flex items-end"
               onClick={handleSliderClick}
               onTouchStart={handleSliderClick}
               onTouchMove={handleSliderClick}
+              ref={sliderRef}
             >
               <motion.div 
                 className="w-full bg-[var(--accent-primary)] shadow-[0_0_15px_var(--accent-primary)]"

@@ -28,6 +28,7 @@ interface PlayerState {
   isCaching: string | null; // ID of the song being cached
   isBuffering: boolean;
   prefetchingId: string | null;
+  audioSource: 'youtube' | 'cache' | 'download' | null;
 
   // Offline State
   downloadingSongs: Set<string>;
@@ -60,6 +61,7 @@ interface PlayerState {
   setShowLyrics: (show: boolean) => void;
   setIsBuffering: (isBuffering: boolean) => void;
   prefetchNext: () => Promise<void>;
+  setAudioSource: (source: 'youtube' | 'cache' | 'download' | null) => void;
   clearPlayerState: () => void;
 }
 
@@ -82,6 +84,7 @@ export const usePlayerStore = create<PlayerState>()(
       isCaching: null,
       isBuffering: false,
       prefetchingId: null,
+      audioSource: null,
       downloadingSongs: new Set(),
 
       toggleDownload: async (song: Song) => {
@@ -224,7 +227,8 @@ export const usePlayerStore = create<PlayerState>()(
           isBuffering: true,
           queue: dynamicQueue, 
           lyrics: null, 
-          progress: startSeconds 
+          progress: startSeconds,
+          audioSource: null 
         });
         LibraryService.recordPlay(song);
         get().fetchLyrics(song);
@@ -550,6 +554,8 @@ export const usePlayerStore = create<PlayerState>()(
         }
       },
 
+      setAudioSource: (source) => set({ audioSource: source }),
+
       clearPlayerState: () => {
         audioEngine.pause();
         set({
@@ -674,6 +680,11 @@ export const initPlayerStoreSync = () => {
       await usePlayerStore.getState().playSong(currentSong, progress);
     }
   });
+
+  // 5. Sync Audio Source
+  audioEngine.onSourceChange = (source) => {
+    usePlayerStore.getState().setAudioSource(source as any);
+  };
 };
 
 export const initializePlayerSession = async () => {

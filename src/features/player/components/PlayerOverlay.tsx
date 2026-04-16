@@ -36,6 +36,7 @@ export function PlayerOverlay() {
     showLyrics, setShowLyrics,
     toggleDownload, downloadingSongs,
     isBuffering,
+    audioSource,
     syncState
   } = usePlayerStore();
 
@@ -144,17 +145,35 @@ export function PlayerOverlay() {
     setLoadingFormats(true);
     setShowFormats(true);
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.195:5000";
-      const { CapacitorHttp } = await import('@capacitor/core');
-      const res = await CapacitorHttp.get({
-        url: `${apiUrl}/formats`,
-        params: { id: currentSong.id }
-      });
-      if (res.status === 200 && res.data.formats) {
-        setFormats(res.data.formats);
+      const isAndroid = typeof window !== 'undefined' && !!(window as any).Capacitor?.isNativePlatform();
+      const isTauri = typeof window !== 'undefined' && (!!(window as any).__TAURI_INTERNALS__ || !!(window as any).__TAURI_METADATA__);
+
+      // Native modes (Android / Tauri Desktop) don't use Railway API,
+      // and we don't have a direct "get formats matrix" command yet.
+      if (isAndroid || isTauri) {
+        setFormats([{ 
+           itag: isAndroid ? 'Android' : 'Desktop', 
+           mimeType: 'audio/mp4; Native yt-dlp', 
+           qualityLabel: 'Auto-Best',
+           bitrate: 'Highest available'
+        }]);
+        setLoadingFormats(false);
+        return;
       }
+
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://chrismusic-production.up.railway.app";
+      const url = `${apiUrl}/formats?id=${currentSong.id}`;
+
+      let formatsData = [];
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.formats) formatsData = data.formats;
+      }
+      setFormats(formatsData);
     } catch (e) {
-      console.error(e);
+      console.error('[Debug Panel] Error loading formats:', e);
+      setFormats([{ itag: 'Error', mimeType: 'Failed to fetch', qualityLabel: 'API Offline' }]);
     } finally {
       setLoadingFormats(false);
     }
@@ -192,6 +211,11 @@ export function PlayerOverlay() {
     }
   };
 
+  // Reset thumbnail error when song changes
+  useEffect(() => {
+    setThumbError(false);
+  }, [currentSong?.id]);
+
   if (!currentSong) return null;
 
   const progressPercent = duration > 0 ? (progress / duration) * 100 : 0;
@@ -219,11 +243,16 @@ export function PlayerOverlay() {
 
             <div className="relative z-10 w-12 h-12 sm:w-16 sm:h-16 mr-3 shrink-0 bg-gray-200 dark:bg-black rounded-lg sm:rounded-xl shadow-sm overflow-hidden group">
               <Image 
-                src={YouTubeExtractionService.normalizeUrl(currentSong.thumbnailUrl)} 
+                key={`${currentSong.id}-mini-${thumbError}`}
+                src={thumbError 
+                  ? YouTubeExtractionService.getFallbackThumbnail(currentSong.id)
+                  : YouTubeExtractionService.normalizeUrl(currentSong.thumbnailUrl)
+                } 
                 alt={currentSong.title} 
                 fill 
                 sizes="(min-width: 640px) 64px, 48px" 
-                className="object-cover group-hover:scale-110 transition-transform" 
+                className="object-cover group-hover:scale-110 transition-transform"
+                onError={() => setThumbError(true)}
               />
             </div>
             <div className="relative z-10 flex-1 min-w-0 mr-4 sm:max-w-xs">
@@ -326,15 +355,28 @@ export function PlayerOverlay() {
                   className="absolute inset-0 transition-all duration-1000"
                 >
                   <Image 
+                    key={`${currentSong.id}-full-${thumbError}`}
                     src={thumbError 
                       ? YouTubeExtractionService.normalizeUrl(currentSong.thumbnailUrl)
-                      : YouTubeExtractionService.getHighResThumbnail(currentSong.id, YouTubeExtractionService.normalizeUrl(currentSong.thumbnailUrl))
+                      : YouTubeExtractionService.getHighResThumbnail(currentSong.id)
                     }
                     alt="" 
                     fill 
                     className="object-cover object-center"
                     priority
-                    onError={() => setThumbError(true)}
+                    onLoad={(e) => {
+                      const img = e.target as HTMLImageElement;
+                      // YouTube returns a 120x90 placeholder if maxres doesn't exist.
+                      // Anything under 400px wide is likely not the high-res artwork we want.
+                      if (!thumbError && img.naturalWidth > 0 && img.naturalWidth < 400) {
+                        console.log('[PlayerOverlay] Detected small YouTube placeholder, falling back...');
+                        setThumbError(true);
+                      }
+                    }}
+                    onError={() => {
+                      console.log('[PlayerOverlay] Image load error, falling back...');
+                      setThumbError(true);
+                    }}
                   />
                 </motion.div>
                 {/* Degradados de legibilidad: Muy suaves */}
@@ -369,7 +411,11 @@ export function PlayerOverlay() {
                     <p>ID: {currentSong.id}</p>
                     <p>TYPE: {isDownloaded ? 'OFFLINE' : 'STREAM'}</p>
                     <p>STATE: {isPlaying ? 'PLAYING' : 'PAUSED'}</p>
+                    <p>SOURCE: <span className="text-white font-black">{audioSource?.toUpperCase() || 'UNKNOWN'}</span></p>
                     <p>PROGRESS: {Math.floor(progress)}s / {Math.floor(duration)}s</p>
+                    <div className="max-w-[200px] overflow-hidden">
+                       <p className="truncate">URL: {audioEngine.currentUrl || 'NONE'}</p>
+                    </div>
                     <div className="flex gap-2 mt-2">
                        <button className="px-2 py-1 bg-white/10 rounded-md pointer-events-auto" onClick={inspectLocalBlob}>BLOB HEX</button>
                        <button className="px-2 py-1 bg-white/10 rounded-md pointer-events-auto" onClick={loadFormats}>FORMATS</button>

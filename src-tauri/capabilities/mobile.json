@@ -21,6 +21,15 @@
             "allow": [
                 {
                     "url": "https://suggestqueries.google.com/complete/search*"
+                },
+                {
+                    "url": "https://*.googlevideo.com/*"
+                },
+                {
+                    "url": "https://*.googleusercontent.com/*"
+                },
+                {
+                    "url": "https://i.ytimg.com/*"
                 }
             ]
         }

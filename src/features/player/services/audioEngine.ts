@@ -21,6 +21,7 @@ type StateCallback = (state: number) => void;
 type TrackChangeCallback = (id: string) => void;
 type ProgressCallback = (data: { current: number; duration: number }) => void;
 type ErrorCallback = (error: string) => void;
+type SourceCallback = (source: 'web' | 'cache' | 'download' | 'youtube' | 'local' | 'unknown') => void;
 
 /**
  * Player state codes (same as before for store compatibility):
@@ -53,11 +54,13 @@ class AudioEngine {
   private onTrackChange: TrackChangeCallback | null = null;
   public onProgress: ProgressCallback | null = null; // Public so store can set it
   private onError: ErrorCallback | null = null;
+  public onSourceChange: SourceCallback | null = null;
   private mediaSessionActions: any = null;
   private currentSongTitle = 'ChrisMusic';
   private currentSongId: string | null = null;
   private currentLoadId = 0;
   public currentUrlSource: 'web' | 'cache' | 'download' | 'youtube' | 'local' | 'unknown' = 'unknown';
+  public currentUrl: string = '';
 
   private constructor() {
     if (typeof window === 'undefined') return;
@@ -73,7 +76,6 @@ class AudioEngine {
       this.htmlPlayer.addEventListener('pause', () => this.emit(STATE.PAUSED));
       this.htmlPlayer.addEventListener('waiting', () => this.emit(STATE.LOADING));
       this.htmlPlayer.addEventListener('playing', () => this.emit(STATE.PLAYING));
-      this.htmlPlayer.addEventListener('canplay', () => this.emit(STATE.PLAYING));
       this.htmlPlayer.addEventListener('timeupdate', () => this.emit(this.getPlayerState()));
     }
   }
@@ -453,6 +455,10 @@ class AudioEngine {
 
       if (src && this.htmlPlayer) {
         if (this.currentLoadId !== loadId) return;
+        this.currentUrl = src;
+        this.currentUrlSource = this.determineSource(src);
+        if (this.onSourceChange) this.onSourceChange(this.currentUrlSource);
+        
         this.htmlPlayer.src = src;
         this.htmlPlayer.load();
 
@@ -463,7 +469,11 @@ class AudioEngine {
               return;
             }
             this.htmlPlayer.currentTime = startSeconds;
-            if (autoplay) this.play();
+            if (autoplay) {
+              this.play();
+            } else {
+              this.emit(STATE.PAUSED);
+            }
             this.updateMediaSessionPosition();
             this.htmlPlayer.removeEventListener('canplay', onCanPlay);
           }
@@ -488,6 +498,7 @@ class AudioEngine {
     loadId?: number
   ) {
     const url = localUrl || song.streamUrl;
+    this.currentUrl = url || '';
 
     // If we have a local/offline file — load it directly
     if (url) {
@@ -496,9 +507,11 @@ class AudioEngine {
       this.emit(STATE.LOADING);
       
       this.currentUrlSource = this.determineSource(url);
+      if (this.onSourceChange) this.onSourceChange(this.currentUrlSource);
 
       try {
-        await this.callExoLoad(url, song.title, song.artistName, song.thumbnailUrl, song.id);
+        const artworkUrl = YouTubeExtractionService.getFallbackThumbnail(song.id, song.thumbnailUrl);
+        await this.callExoLoad(url, song.title, song.artistName, artworkUrl, song.id);
         
         if (loadId && this.currentLoadId !== loadId) {
            console.log(`[AudioEngine] [#${loadId}] Offline song loaded but request is stale. Stop.`);
@@ -544,7 +557,11 @@ class AudioEngine {
       }
 
       console.log(`[AudioEngine] [#${loadId}] Got stream URL, handing off to ExoPlayer`);
-      await this.callExoLoad(streamUrl, song.title, song.artistName, song.thumbnailUrl);
+      this.currentUrlSource = 'youtube';
+      if (this.onSourceChange) this.onSourceChange('youtube');
+
+      const artworkUrl = YouTubeExtractionService.getFallbackThumbnail(song.id, song.thumbnailUrl);
+      await this.callExoLoad(streamUrl, song.title, song.artistName, artworkUrl);
       
       if (loadId && this.currentLoadId !== loadId) {
         console.log(`[AudioEngine] [#${loadId}] Stale request after actual load call. Stopping.`);
@@ -567,23 +584,26 @@ class AudioEngine {
   }
 
   private async callExoLoad(url: string, title: string, artist: string, artwork?: string, id?: string) {
+    this.currentUrl = url;
     await ExoPlayerNative.load({ url, title, artist, artwork: artwork ?? '', id: id ?? '' });
   }
 
   // ─── MediaSession (Web only) ───────────────────────────────────────────────
 
   private async setWebMediaSession(
-    song: { title: string; artistName: string; albumName?: string; thumbnailUrl?: string },
+    song: { id?: string; title: string; artistName: string; albumName?: string; thumbnailUrl?: string },
     autoplay: boolean
   ) {
     if (!('mediaSession' in navigator)) return;
+    const artworkUrl = YouTubeExtractionService.getFallbackThumbnail(song.id, song.thumbnailUrl);
+    
     const metadata = {
       title: song.title,
       artist: song.artistName,
       album: song.albumName || 'ChrisMusic',
       artwork: [
-        { src: song.thumbnailUrl || '/icon-192x192.png', sizes: '192x192', type: 'image/jpeg' },
-        { src: song.thumbnailUrl || '/icon-512x512.png', sizes: '512x512', type: 'image/jpeg' },
+        { src: artworkUrl || '/icon-192x192.png', sizes: '192x192', type: 'image/jpeg' },
+        { src: artworkUrl || '/icon-512x512.png', sizes: '512x512', type: 'image/jpeg' },
       ],
     };
 
@@ -730,7 +750,7 @@ class AudioEngine {
         url,
         title: song.title,
         artist: song.artistName,
-        artwork: song.thumbnailUrl
+        artwork: YouTubeExtractionService.getFallbackThumbnail(song.id, song.thumbnailUrl)
       });
     } catch (e) {
       console.error('[AudioEngine] Failed to add next track natively:', e);
@@ -768,9 +788,10 @@ class AudioEngine {
       return 'cache';
     }
 
-    if (url.includes('youtube.com') || url.includes('googlevideo.com') || url.startsWith('http')) {
-       // If it's a remote URL and not our local proxy, it's youtube
-       return 'youtube';
+    if (url.includes('youtube.com') || url.includes('googlevideo.com') || url.includes('googleusercontent.com') || url.startsWith('http')) {
+       // Si es una URL remota y no es nuestro proxy local, es youtube
+       const isLocalProxy = url.includes('localhost') || url.includes('127.0.0.1');
+       return isLocalProxy ? 'cache' : 'youtube';
     }
     
     return 'unknown';

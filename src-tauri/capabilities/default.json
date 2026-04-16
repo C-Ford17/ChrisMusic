@@ -33,12 +33,23 @@
       "allow": [
         {
           "url": "https://suggestqueries.google.com/complete/search*"
+        },
+        {
+          "url": "https://*.googlevideo.com/*"
+        },
+        {
+          "url": "https://*.googleusercontent.com/*"
+        },
+        {
+          "url": "https://i.ytimg.com/*"
         }
       ]
     },
     "allow-search-youtube-native-cmd",
     "allow-get-streaming-url",
     "allow-download-to-disk",
-    "allow-test-ytdlp"
+    "allow-test-ytdlp",
+    "updater:default",
+    "updater:allow-check"
   ]
 }

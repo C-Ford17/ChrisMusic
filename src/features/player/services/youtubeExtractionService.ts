@@ -107,11 +107,25 @@ export class YouTubeExtractionService {
   }
 
   public static isAndroid(): boolean {
-    return Capacitor.getPlatform() === 'android';
+    if (typeof window === 'undefined') return false;
+    // Check for Capacitor Global
+    return (window as any).Capacitor?.getPlatform() === 'android';
   }
 
   public static isTauri(): boolean {
-    return typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__ !== undefined;
+    const isT = typeof window !== 'undefined' && (
+      (window as any).__TAURI_INTERNALS__ !== undefined || 
+      (window as any).__TAURI__ !== undefined ||
+      (window as any).rpc !== undefined ||
+      !!(window as any).__TAURI_METADATA__
+    );
+    return isT;
+  }
+
+  public static getEnv(): string {
+    if (this.isAndroid()) return 'ANDROID';
+    if (this.isTauri()) return 'TAURI/DESKTOP';
+    return 'WEB/PROXY';
   }
 
   /**
@@ -122,10 +136,7 @@ export class YouTubeExtractionService {
     if (!url) return '';
     if (this.isAndroid() && url.startsWith('file://')) {
       try {
-        const { Capacitor } = (window as any);
-        if (Capacitor && Capacitor.convertFileSrc) {
-          return Capacitor.convertFileSrc(url);
-        }
+        return Capacitor.convertFileSrc(url);
       } catch (e) {
         console.warn('[YouTubeExtractionService] Failed to normalize native URL:', e);
       }
@@ -144,9 +155,28 @@ export class YouTubeExtractionService {
    * Returns the highest resolution thumbnail possible for a YouTube video.
    */
   public static getHighResThumbnail(songId?: string, fallbackUrl?: string): string {
+    // If we have a local/blob URL, keep it as is
+    if (fallbackUrl && (
+      fallbackUrl.includes('_capacitor_file_') || 
+      fallbackUrl.startsWith('http://localhost') || 
+      fallbackUrl.startsWith('https://localhost') || 
+      fallbackUrl.startsWith('blob:') || 
+      fallbackUrl.startsWith('file:') || 
+      fallbackUrl.startsWith('capacitor:')
+    )) {
+      return fallbackUrl;
+    }
     if (!songId) return fallbackUrl || '';
-    // YouTube has a predictable high-res URL pattern
     return `https://i.ytimg.com/vi/${songId}/maxresdefault.jpg`;
+  }
+
+  public static getFallbackThumbnail(songId?: string, fallbackUrl?: string): string {
+    // If we already have a specialized local/blob URL, don't override it
+    if (fallbackUrl && (fallbackUrl.includes('_capacitor_file_') || fallbackUrl.startsWith('http://localhost') || fallbackUrl.startsWith('https://localhost') || fallbackUrl.startsWith('blob:') || fallbackUrl.startsWith('file:') || fallbackUrl.startsWith('capacitor:'))) {
+      return fallbackUrl;
+    }
+    if (!songId) return fallbackUrl || '';
+    return `https://i.ytimg.com/vi/${songId}/hqdefault.jpg`;
   }
 
   public static isCapacitor(): boolean {
@@ -313,31 +343,44 @@ export class YouTubeExtractionService {
 
   async getStreamUrl(videoId: string): Promise<string> {
     await this.ensureInitialized();
+    const isNative = YouTubeExtractionService.isAndroid() || YouTubeExtractionService.isTauri();
 
-    // Strategy 1: Native yt-dlp (Android) - MOST STABLE
+    console.log(`[YouTubeExtractionService] Fetching stream for ${videoId}. Env: ${YouTubeExtractionService.getEnv()}`);
+
+    // Strategy 1: Native yt-dlp (Android)
     if (YouTubeExtractionService.isAndroid()) {
       try {
-        console.log(`[YouTubeExtractionService] Using Native yt-dlp for: ${videoId}`);
         const result = await YouTubeNative.getStreamUrl({ videoId });
         if (result.url) return result.url;
       } catch (e) {
-        console.warn('[YouTubeExtractionService] Native extraction failed, failing back to Railway:', e);
+        console.error('[YouTubeExtractionService] Android native extraction failed:', e);
       }
     }
 
     // Strategy 2: Tauri (Native Rust)
     if (YouTubeExtractionService.isTauri()) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      return await invoke('get_streaming_url', { videoId });
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        const url = await invoke('get_streaming_url', { videoId });
+        if (url) return url as string;
+      } catch (e) {
+        console.error('[YouTubeExtractionService] Tauri native extraction failed:', e);
+      }
     }
 
-    // Strategy 3: Railway Proxy (Web Fallback)
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-    const response = await fetch(`${apiUrl}/stream?id=${videoId}`);
-    const data = await response.json();
-    if (data.url) return data.url;
+    // Strategy 3: Railway Proxy (Web Fallback) - ONLY if NOT Native
+    if (!isNative) {
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://chrismusic-production.up.railway.app";
+        const response = await fetch(`${apiUrl}/stream?id=${videoId}`);
+        const data = await response.json();
+        if (data.url) return data.url;
+      } catch (e) {
+        console.error('[YouTubeExtractionService] Railway fallback failed:', e);
+      }
+    }
 
-    throw new Error('Could not extract stream URL');
+    throw new Error(`Could not extract stream URL for ${videoId} in ${YouTubeExtractionService.getEnv()} environment.`);
   }
 }
 
