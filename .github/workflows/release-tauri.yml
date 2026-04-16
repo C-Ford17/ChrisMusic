@@ -47,30 +47,27 @@ jobs:
         shell: bash
         run: echo "VERSION=${GITHUB_REF_NAME#tauri-}" >> $GITHUB_OUTPUT
 
-      - name: 🔐 Verify Secrets
+      - name: 🔐 Generate Key File
         shell: bash
         env:
-          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          KEY_BASE64: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: |
-          if [ -z "$KEY" ]; then
-            echo "❌ ERROR FATAL: El secreto TAURI_SIGNING_PRIVATE_KEY está vacío o no lo copiaste bien en GitHub."
+          if [ -z "$KEY_BASE64" ]; then
+            echo "❌ ERROR FATAL: El secreto TAURI_SIGNING_PRIVATE_KEY está vacío."
             exit 1
-          else
-            echo "✅ El secreto fue encontrado en GitHub."
           fi
+          echo "$KEY_BASE64" | base64 --decode > tauri_private.key
+          echo "✅ Llave privada decodificada a tauri_private.key"
 
       - name: 🏗️ Build Tauri App
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PATH: tauri_private.key
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "ChrisMusic Desktop ${{ steps.version.outputs.VERSION }}"
-          releaseBody: |
-            ## 🖥️ Actualización de Escritorio (Windows)
-            Instala el archivo `.exe` para actualizar la versión de escritorio.
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
