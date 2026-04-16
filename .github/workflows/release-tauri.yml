@@ -47,13 +47,11 @@ jobs:
         shell: bash
         run: echo "VERSION=${GITHUB_REF_NAME#tauri-}" >> $GITHUB_OUTPUT
 
-      - name: 🏗️ Local Rust Build
+      - name: 🏗️ Tauri Build
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: |
-          npm run build
-          npx tauri build --bundles msi,nsis
+        run: npx tauri build --bundles msi,nsis ${{ matrix.args }}
 
       - name: 🚀 Create GitHub Release and upload Exes
         uses: softprops/action-gh-release@v2
