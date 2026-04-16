@@ -47,8 +47,20 @@ jobs:
         shell: bash
         run: echo "VERSION=${GITHUB_REF_NAME#tauri-}" >> $GITHUB_OUTPUT
 
+      - name: 🔐 Verify Secrets
+        shell: bash
+        env:
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "❌ ERROR FATAL: El secreto TAURI_SIGNING_PRIVATE_KEY está vacío o no lo copiaste bien en GitHub."
+            exit 1
+          else
+            echo "✅ El secreto fue encontrado en GitHub."
+          fi
+
       - name: 🏗️ Build Tauri App
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
