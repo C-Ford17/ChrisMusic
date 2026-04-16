@@ -1,6 +1,6 @@
 {
   "version": "1.0.8",
-  "notes": "v1.0.7: Fix de volumen, build de tauri corregido y sistema de reinstalación forzada",
+  "notes": "v1.0.8: Sistema de actualización automática activado y mejoras de estabilidad",
   "pub_date": "2026-04-14T00:00:00Z",
   "platforms": {
     "android": {
