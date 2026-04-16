@@ -53,3 +53,7 @@ build_log_utf8.txt
 # Local Config & OTA
 capacitor.config.local.json
 dist.zip
+
+# Tauri Signer Keys
+chrismusic.key
+chrismusic.key.pub
