@@ -47,26 +47,13 @@ jobs:
         shell: bash
         run: echo "VERSION=${GITHUB_REF_NAME#tauri-}" >> $GITHUB_OUTPUT
 
-      - name: 🔐 Generate Key File
-        shell: bash
+      - name: 🏗️ Local Rust Build
         env:
-          KEY_BASE64: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-        run: |
-          if [ -z "$KEY_BASE64" ]; then
-            echo "❌ ERROR FATAL: El secreto TAURI_SIGNING_PRIVATE_KEY está vacío."
-            exit 1
-          fi
-          echo "$KEY_BASE64" | base64 --decode > tauri_private.key
-          echo "✅ Llave privada decodificada a tauri_private.key"
-
-      - name: 🏗️ Build Tauri App
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY_PATH: ${{ github.workspace }}/tauri_private.key
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        with:
-          args: ${{ matrix.args }}
+        run: |
+          npm run build
+          npx tauri build --bundles msi,nsis
 
       - name: 🚀 Create GitHub Release and upload Exes
         uses: softprops/action-gh-release@v2
