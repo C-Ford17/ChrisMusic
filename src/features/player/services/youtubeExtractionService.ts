@@ -131,16 +131,36 @@ export class YouTubeExtractionService {
   /**
    * Normalizes a URL for the current platform.
    * On Android, converts file:// URIs to local-server URIs that the WebView can access.
+   * On Desktop, if it detects an Android local path, it fallbacks to the YouTube URL using the songId.
    */
-  static normalizeUrl(url?: string): string {
-    if (!url) return '';
-    if (this.isAndroid() && url.startsWith('file://')) {
-      try {
-        return Capacitor.convertFileSrc(url);
-      } catch (e) {
-        console.warn('[YouTubeExtractionService] Failed to normalize native URL:', e);
+  static normalizeUrl(url?: string, songId?: string): string {
+    if (!url) return songId ? `https://i.ytimg.com/vi/${songId}/mqdefault.jpg` : '';
+    
+    const isAndroidPath = url.includes('_capacitor_file_') || url.startsWith('capacitor:') || url.startsWith('http://localhost');
+    const isDesktopPath = url.startsWith('asset:') || url.startsWith('http://asset.localhost');
+    const isBlob = url.startsWith('blob:');
+
+    // Case 1: On Android, fixing Desktop or Blob paths
+    if (this.isAndroid()) {
+      if (url.startsWith('file://')) {
+        try { return Capacitor.convertFileSrc(url); } catch { return url; }
       }
+      // If we see a desktop-only path on Android, we fallback to YouTube
+      if ((isDesktopPath || isBlob) && songId) {
+        return `https://i.ytimg.com/vi/${songId}/mqdefault.jpg`;
+      }
+      return url;
     }
+
+    // Case 2: On Desktop (Tauri), fixing Android or Blob paths
+    if (this.isTauri()) {
+      // If we see an android-only path or a blob on PC, we fallback to YouTube
+      if ((isAndroidPath || isBlob || url.startsWith('file://')) && songId) {
+        return `https://i.ytimg.com/vi/${songId}/mqdefault.jpg`;
+      }
+      return url;
+    }
+
     return url;
   }
 

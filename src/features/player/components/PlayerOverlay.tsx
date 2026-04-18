@@ -246,7 +246,7 @@ export function PlayerOverlay() {
                 key={`${currentSong.id}-mini-${thumbError}`}
                 src={thumbError 
                   ? YouTubeExtractionService.getFallbackThumbnail(currentSong.id)
-                  : YouTubeExtractionService.normalizeUrl(currentSong.thumbnailUrl)
+                  : YouTubeExtractionService.normalizeUrl(currentSong.thumbnailUrl, currentSong.id)
                 } 
                 alt={currentSong.title} 
                 fill 
@@ -357,7 +357,7 @@ export function PlayerOverlay() {
                   <Image 
                     key={`${currentSong.id}-full-${thumbError}`}
                     src={thumbError 
-                      ? YouTubeExtractionService.normalizeUrl(currentSong.thumbnailUrl)
+                      ? YouTubeExtractionService.normalizeUrl(currentSong.thumbnailUrl, currentSong.id)
                       : YouTubeExtractionService.getHighResThumbnail(currentSong.id)
                     }
                     alt="" 
@@ -528,7 +528,7 @@ export function PlayerOverlay() {
                            <div key={`${song.id}-${idx}`} className={`group flex items-center justify-between p-5 rounded-[25px] transition-all cursor-pointer border ${currentSong.id === song.id ? 'bg-[var(--accent-primary)]/20 border-[var(--accent-primary)]/40 shadow-[0_10px_30px_var(--accent-primary)]/20' : 'bg-white/2 border-white/5 hover:bg-white/10 hover:border-white/20'}`} onClick={() => playFromQueue(idx)}>
                              <div className="flex items-center min-w-0 pr-4">
                                <div className="relative w-14 h-14 mr-5 shrink-0 rounded-2xl overflow-hidden shadow-xl">
-                                 <Image src={YouTubeExtractionService.normalizeUrl(song.thumbnailUrl)} alt={song.title} fill sizes="56px" className="object-cover" />
+                                 <Image src={YouTubeExtractionService.normalizeUrl(song.thumbnailUrl, song.id)} alt={song.title} fill sizes="56px" className="object-cover" />
                                </div>
                                <div className="min-w-0">
                                  <h4 className={`text-base font-bold truncate ${currentSong.id === song.id ? 'text-[var(--accent-primary)]' : 'text-white'}`}>{song.title}</h4>

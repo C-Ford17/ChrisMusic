@@ -79,7 +79,7 @@ function PlaylistContent() {
             >
               <div className="flex items-center min-w-0 pr-4">
                 <div className="relative w-12 h-12 mr-4 shrink-0 bg-black rounded overflow-hidden shadow">
-                  <Image src={YouTubeExtractionService.normalizeUrl(entry.song.thumbnailUrl)} alt={entry.song.title} fill sizes="48px" className="object-cover" />
+                  <Image src={YouTubeExtractionService.normalizeUrl(entry.song.thumbnailUrl, entry.song.id)} alt={entry.song.title} fill sizes="48px" className="object-cover" />
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                     <Play size={20} className="text-white" fill="currentColor" />
                   </div>

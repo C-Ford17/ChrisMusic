@@ -43,7 +43,7 @@ interface UpdateInfo {
 }
 
 // Esta versión debe coincidir con la de package.json cada vez que hagas un build nativo
-const APP_CODE_VERSION = "1.0.9";
+const APP_CODE_VERSION = "1.0.10";
 
 export function UpdaterComponent() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
@@ -232,7 +232,11 @@ export function UpdaterComponent() {
             className="bg-green-500 hover:bg-green-600 text-black font-semibold rounded-full px-6"
             disabled={isUpdating}
           >
-            {isUpdating ? "Cargando..." : (updateInfo?.type === 'android-ota' ? "Actualizar Ahora" : "Descargar APK")}
+            {isUpdating 
+              ? "Cargando..." 
+              : (updateInfo?.type === 'android-ota' || updateInfo?.type === 'tauri' 
+                  ? "Actualizar Ahora" 
+                  : "Descargar APK")}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -119,7 +119,7 @@ export default function Home() {
                     onContextMenu={(e) => { e.preventDefault(); setSwipedId(swipedId === item.id ? null : item.id!); }}
                   >
                     <div className="relative w-14 h-14 mr-5 shrink-0 bg-gray-200 dark:bg-gray-800 rounded-2xl overflow-hidden shadow-md">
-                      <Image src={YouTubeExtractionService.normalizeUrl(item.song.thumbnailUrl)} alt={item.song.title} fill sizes="56px" className="object-cover group-hover:scale-110 transition-transform duration-500" />
+                      <Image src={YouTubeExtractionService.normalizeUrl(item.song.thumbnailUrl, item.song.id)} alt={item.song.title} fill sizes="56px" className="object-cover group-hover:scale-110 transition-transform duration-500" />
                     </div>
                     <div className="flex-1 min-w-0 mr-4 text-left">
                       <h3 className="text-black dark:text-white font-black truncate group-hover:text-[var(--accent-primary)] transition-colors tracking-tight text-lg">{item.song.title}</h3>

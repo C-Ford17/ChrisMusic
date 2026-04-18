@@ -36,8 +36,8 @@ try {
     fs.writeFileSync(files.component, component);
 
     const upd = JSON.parse(fs.readFileSync(files.updater, 'utf8'));
-    upd.platforms.android.web_version = newVersion;
-    upd.platforms.android.web_url = `https://github.com/C-Ford17/ChrisMusic/releases/download/${newVersion}/dist.zip`;
+    upd.android.web_version = newVersion;
+    upd.android.web_url = `https://github.com/C-Ford17/ChrisMusic/releases/download/${newVersion}/dist.zip`;
     fs.writeFileSync(files.updater, JSON.stringify(upd, null, 2));
     console.log('✅ Archivos OTA actualidazos (package.json, UpdaterComponent, updater.json)');
   }
@@ -63,8 +63,8 @@ try {
     fs.writeFileSync(files.gradle, gradle);
 
     const upd = JSON.parse(fs.readFileSync(files.updater, 'utf8'));
-    upd.platforms.android.version = newVersion; // Versión nativa específica de Android
-    upd.platforms.android.url = `https://github.com/C-Ford17/ChrisMusic/releases/download/native-${newVersion}/app-release.apk`;
+    upd.android.version = newVersion; // Versión nativa específica de Android
+    upd.android.url = `https://github.com/C-Ford17/ChrisMusic/releases/download/native-${newVersion}/app-release.apk`;
     fs.writeFileSync(files.updater, JSON.stringify(upd, null, 2));
     console.log('✅ Archivos NATIVE actualizados');
   }
