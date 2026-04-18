@@ -39,6 +39,11 @@ jobs:
         with:
           targets: x86_64-pc-windows-msvc
 
+      - name: ⚡ Cache Rust dependencies
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
       - name: 📦 Install dependencies
         run: npm ci --legacy-peer-deps
 
@@ -52,6 +57,23 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npx tauri build --bundles msi,nsis ${{ matrix.args }}
+
+      - name: 📝 Update updater.json signature
+        shell: pwsh
+        run: |
+          $signature = Get-Content (Get-ChildItem src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.sig | Select-Object -First 1)
+          $updater = Get-Content updater.json | ConvertFrom-Json
+          $updater.platforms.'windows-x86_64'.signature = $signature
+          $updater.pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+          $updater | ConvertTo-Json -Depth 10 | Set-Content updater.json
+
+      - name: 🚀 Commit updated updater.json
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add updater.json
+          git commit -m "chore: update signature in updater.json [skip ci]" || echo "No changes to commit"
+          git push origin main
 
       - name: 🚀 Create GitHub Release and upload Exes
         uses: softprops/action-gh-release@v2
