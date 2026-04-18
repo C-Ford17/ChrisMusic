@@ -1,6 +1,6 @@
 {
-  "version": "1.0.9",
-  "notes": "v1.0.9: Estabilización de arquitectura y sistema de actualizaciones limpio",
+  "version": "1.0.8",
+  "notes": "v1.0.8: Versión estable de escritorio",
   "pub_date": "2026-04-16T00:00:00Z",
   "platforms": {
     "windows-x86_64": {
