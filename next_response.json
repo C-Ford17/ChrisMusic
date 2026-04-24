@@ -1,0 +1,442 @@
+﻿{
+    "responseContext":  {
+                            "visitorData":  "CgtsUGliMG1HM1ZDYyism67PBjIKCgJDTxIEGgAgWg%3D%3D",
+                            "serviceTrackingParams":  [
+                                                          {
+                                                              "service":  "CSI",
+                                                              "params":  [
+                                                                             {
+                                                                                 "key":  "c",
+                                                                                 "value":  "WEB_REMIX"
+                                                                             },
+                                                                             {
+                                                                                 "key":  "cver",
+                                                                                 "value":  "1.20241028.01.00"
+                                                                             },
+                                                                             {
+                                                                                 "key":  "yt_li",
+                                                                                 "value":  "0"
+                                                                             },
+                                                                             {
+                                                                                 "key":  "GetWatchNext_rid",
+                                                                                 "value":  "0x25710773450cc74f"
+                                                                             }
+                                                                         ]
+                                                          },
+                                                          {
+                                                              "service":  "GFEEDBACK",
+                                                              "params":  [
+                                                                             {
+                                                                                 "key":  "logged_in",
+                                                                                 "value":  "0"
+                                                                             }
+                                                                         ]
+                                                          },
+                                                          {
+                                                              "service":  "ECATCHER",
+                                                              "params":  [
+                                                                             {
+                                                                                 "key":  "client.version",
+                                                                                 "value":  "1.20000101"
+                                                                             },
+                                                                             {
+                                                                                 "key":  "client.name",
+                                                                                 "value":  "WEB_REMIX"
+                                                                             }
+                                                                         ]
+                                                          }
+                                                      ],
+                            "responseId":  "IhMIyL2rlOiGlAMVmEFCBx2D4zNe"
+                        },
+    "contents":  {
+                     "singleColumnMusicWatchNextResultsRenderer":  {
+                                                                       "tabbedRenderer":  {
+                                                                                              "watchNextTabbedResultsRenderer":  {
+                                                                                                                                     "tabs":  [
+                                                                                                                                                  {
+                                                                                                                                                      "tabRenderer":  {
+                                                                                                                                                                          "title":  "Siguiente",
+                                                                                                                                                                          "content":  {
+                                                                                                                                                                                          "musicQueueRenderer":  {
+                                                                                                                                                                                                                     "content":  {
+                                                                                                                                                                                                                                     "playlistPanelRenderer":  "@{contents=System.Object[]; isInfinite=False; trackingParams=CBgQxyAiEwjIvauU6IaUAxWYQUIHHYPjM14=; shuffleToggleButton=}"
+                                                                                                                                                                                                                                 },
+                                                                                                                                                                                                                     "hack":  true,
+                                                                                                                                                                                                                     "musicQueueConfig":  {
+
+                                                                                                                                                                                                                                          },
+                                                                                                                                                                                                                     "header":  {
+                                                                                                                                                                                                                                    "musicQueueHeaderRenderer":  "@{title=; subtitle=; buttons=System.Object[]; trackingParams=CBUQ0ecHIhMIyL2rlOiGlAMVmEFCBx2D4zNe}"
+                                                                                                                                                                                                                                }
+                                                                                                                                                                                                                 }
+                                                                                                                                                                                      },
+                                                                                                                                                                          "trackingParams":  "CBQQn7QFGAQiEwjIvauU6IaUAxWYQUIHHYPjM14="
+                                                                                                                                                                      }
+                                                                                                                                                  },
+                                                                                                                                                  {
+                                                                                                                                                      "tabRenderer":  {
+                                                                                                                                                                          "endpoint":  {
+                                                                                                                                                                                           "clickTrackingParams":  "CBMQk80FGAUiEwjIvauU6IaUAxWYQUIHHYPjM17KAQTyeVgg",
+                                                                                                                                                                                           "browseEndpoint":  {
+                                                                                                                                                                                                                  "browseId":  "MPLYt_yv_1AkTkZT0M_0",
+                                                                                                                                                                                                                  "browseEndpointContextSupportedConfigs":  {
+                                                                                                                                                                                                                                                                "browseEndpointContextMusicConfig":  "@{pageType=MUSIC_PAGE_TYPE_TRACK_LYRICS}"
+                                                                                                                                                                                                                                                            }
+                                                                                                                                                                                                              }
+                                                                                                                                                                                       },
+                                                                                                                                                                          "title":  "Letra",
+                                                                                                                                                                          "trackingParams":  "CBMQk80FGAUiEwjIvauU6IaUAxWYQUIHHYPjM14=",
+                                                                                                                                                                          "unselectable":  true
+                                                                                                                                                                      }
+                                                                                                                                                  },
+                                                                                                                                                  {
+                                                                                                                                                      "tabRenderer":  {
+                                                                                                                                                                          "endpoint":  {
+                                                                                                                                                                                           "clickTrackingParams":  "CBIQlM0FGAYiEwjIvauU6IaUAxWYQUIHHYPjM17KAQTyeVgg",
+                                                                                                                                                                                           "browseEndpoint":  {
+                                                                                                                                                                                                                  "browseId":  "MPTRt_yv_1AkTkZT0M_0",
+                                                                                                                                                                                                                  "browseEndpointContextSupportedConfigs":  {
+                                                                                                                                                                                                                                                                "browseEndpointContextMusicConfig":  "@{pageType=MUSIC_PAGE_TYPE_TRACK_RELATED}"
+                                                                                                                                                                                                                                                            }
+                                                                                                                                                                                                              }
+                                                                                                                                                                                       },
+                                                                                                                                                                          "title":  "Relacionado",
+                                                                                                                                                                          "trackingParams":  "CBIQlM0FGAYiEwjIvauU6IaUAxWYQUIHHYPjM14="
+                                                                                                                                                                      }
+                                                                                                                                                  }
+                                                                                                                                              ]
+                                                                                                                                 }
+                                                                                          }
+                                                                   }
+                 },
+    "currentVideoEndpoint":  {
+                                 "clickTrackingParams":  "CAAQg2ciEwjIvauU6IaUAxWYQUIHHYPjM17KAQTyeVgg",
+                                 "watchEndpoint":  {
+                                                       "videoId":  "1AkTkZT0M_0",
+                                                       "ustreamerConfig":  "GgIIBQ=="
+                                                   }
+                             },
+    "trackingParams":  "CAAQg2ciEwjIvauU6IaUAxWYQUIHHYPjM17KAQTyeVgg",
+    "playerOverlays":  {
+                           "playerOverlayRenderer":  {
+                                                         "actions":  [
+                                                                         {
+                                                                             "likeButtonRenderer":  {
+                                                                                                        "target":  {
+                                                                                                                       "videoId":  "1AkTkZT0M_0"
+                                                                                                                   },
+                                                                                                        "likeStatus":  "INDIFFERENT",
+                                                                                                        "trackingParams":  "CA8QpUEYACITCMi9q5TohpQDFZhBQgcdg-MzXg==",
+                                                                                                        "likesAllowed":  true,
+                                                                                                        "dislikeNavigationEndpoint":  {
+                                                                                                                                          "clickTrackingParams":  "CA8QpUEYACITCMi9q5TohpQDFZhBQgcdg-MzXsoBBPJ5WCA=",
+                                                                                                                                          "modalEndpoint":  {
+                                                                                                                                                                "modal":  {
+                                                                                                                                                                              "modalWithTitleAndButtonRenderer":  {
+                                                                                                                                                                                                                      "title":  {
+                                                                                                                                                                                                                                    "runs":  ""
+                                                                                                                                                                                                                                },
+                                                                                                                                                                                                                      "content":  {
+                                                                                                                                                                                                                                      "runs":  ""
+                                                                                                                                                                                                                                  },
+                                                                                                                                                                                                                      "button":  {
+                                                                                                                                                                                                                                     "buttonRenderer":  "@{style=STYLE_BLUE_TEXT; isDisabled=False; text=; navigationEndpoint=; trackingParams=CBEQ8FsiEwjIvauU6IaUAxWYQUIHHYPjM14=}"
+                                                                                                                                                                                                                                 }
+                                                                                                                                                                                                                  }
+                                                                                                                                                                          }
+                                                                                                                                                            }
+                                                                                                                                      },
+                                                                                                        "likeCommand":  {
+                                                                                                                            "clickTrackingParams":  "CA8QpUEYACITCMi9q5TohpQDFZhBQgcdg-MzXsoBBPJ5WCA=",
+                                                                                                                            "modalEndpoint":  {
+                                                                                                                                                  "modal":  {
+                                                                                                                                                                "modalWithTitleAndButtonRenderer":  {
+                                                                                                                                                                                                        "title":  {
+                                                                                                                                                                                                                      "runs":  ""
+                                                                                                                                                                                                                  },
+                                                                                                                                                                                                        "content":  {
+                                                                                                                                                                                                                        "runs":  ""
+                                                                                                                                                                                                                    },
+                                                                                                                                                                                                        "button":  {
+                                                                                                                                                                                                                       "buttonRenderer":  "@{style=STYLE_BLUE_TEXT; isDisabled=False; text=; navigationEndpoint=; trackingParams=CBAQ8FsiEwjIvauU6IaUAxWYQUIHHYPjM14=}"
+                                                                                                                                                                                                                   }
+                                                                                                                                                                                                    }
+                                                                                                                                                            }
+                                                                                                                                              }
+                                                                                                                        }
+                                                                                                    }
+                                                                         }
+                                                                     ],
+                                                         "browserMediaSession":  {
+                                                                                     "browserMediaSessionRenderer":  {
+                                                                                                                         "thumbnailDetails":  {
+                                                                                                                                                  "thumbnails":  [
+                                                                                                                                                                     {
+                                                                                                                                                                         "url":  "https://i.ytimg.com/vi/1AkTkZT0M_0/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg\u0026rs=AMzJL3msSMyynNa4zINtu7RMsqEJksvyqw",
+                                                                                                                                                                         "width":  400,
+                                                                                                                                                                         "height":  225
+                                                                                                                                                                     },
+                                                                                                                                                                     {
+                                                                                                                                                                         "url":  "https://i.ytimg.com/vi/1AkTkZT0M_0/hq720.jpg?sqp=-oaymwEXCKAGEMIDIAQqCwjVARCqCBh4INgESFo\u0026rs=AMzJL3nVVIZ3c_Y7466tuJobnvZJByVbQA",
+                                                                                                                                                                         "width":  800,
+                                                                                                                                                                         "height":  450
+                                                                                                                                                                     },
+                                                                                                                                                                     {
+                                                                                                                                                                         "url":  "https://i.ytimg.com/vi/1AkTkZT0M_0/hq720.jpg?sqp=-oaymwEXCNUGEOADIAQqCwjVARCqCBh4INgESFo\u0026rs=AMzJL3lBSLQVClxtw4GQ8HjziJ9KZHYF_g",
+                                                                                                                                                                         "width":  853,
+                                                                                                                                                                         "height":  480
+                                                                                                                                                                     }
+                                                                                                                                                                 ]
+                                                                                                                                              }
+                                                                                                                     }
+                                                                                 }
+                                                     }
+                       },
+    "videoReporting":  {
+                           "reportFormModalRenderer":  {
+                                                           "optionsSupportedRenderers":  {
+                                                                                             "optionsRenderer":  {
+                                                                                                                     "items":  [
+                                                                                                                                   {
+                                                                                                                                       "optionSelectableItemRenderer":  {
+                                                                                                                                                                            "text":  {
+                                                                                                                                                                                         "runs":  [
+                                                                                                                                                                                                      {
+                                                                                                                                                                                                          "text":  "Contenido sexual"
+                                                                                                                                                                                                      }
+                                                                                                                                                                                                  ]
+                                                                                                                                                                                     },
+                                                                                                                                                                            "trackingParams":  "CA4Q7ZMBGAAiEwjIvauU6IaUAxWYQUIHHYPjM14=",
+                                                                                                                                                                            "submitEndpoint":  {
+                                                                                                                                                                                                   "clickTrackingParams":  "CA4Q7ZMBGAAiEwjIvauU6IaUAxWYQUIHHYPjM17KAQTyeVgg",
+                                                                                                                                                                                                   "flagEndpoint":  {
+                                                                                                                                                                                                                        "flagAction":  "EAciDwoLMUFrVGtaVDBNXzBQBTILMUFrVGtaVDBNXzCQASyYAQGoAQM%3D"
+                                                                                                                                                                                                                    }
+                                                                                                                                                                                               }
+                                                                                                                                                                        }
+                                                                                                                                   },
+                                                                                                                                   {
+                                                                                                                                       "optionSelectableItemRenderer":  {
+                                                                                                                                                                            "text":  {
+                                                                                                                                                                                         "runs":  [
+                                                                                                                                                                                                      {
+                                                                                                                                                                                                          "text":  "Contenido violento o repugnante"
+                                                                                                                                                                                                      }
+                                                                                                                                                                                                  ]
+                                                                                                                                                                                     },
+                                                                                                                                                                            "trackingParams":  "CA0Q7ZMBGAEiEwjIvauU6IaUAxWYQUIHHYPjM14=",
+                                                                                                                                                                            "submitEndpoint":  {
+                                                                                                                                                                                                   "clickTrackingParams":  "CA0Q7ZMBGAEiEwjIvauU6IaUAxWYQUIHHYPjM17KAQTyeVgg",
+                                                                                                                                                                                                   "flagEndpoint":  {
+                                                                                                                                                                                                                        "flagAction":  "EAciDwoLMUFrVGtaVDBNXzBQBTILMUFrVGtaVDBNXzCQATaYAQGoAQM%3D"
+                                                                                                                                                                                                                    }
+                                                                                                                                                                                               }
+                                                                                                                                                                        }
+                                                                                                                                   },
+                                                                                                                                   {
+                                                                                                                                       "optionSelectableItemRenderer":  {
+                                                                                                                                                                            "text":  {
+                                                                                                                                                                                         "runs":  [
+                                                                                                                                                                                                      {
+                                                                                                                                                                                                          "text":  "Contenido vejatorio o que incite al odio"
+                                                                                                                                                                                                      }
+                                                                                                                                                                                                  ]
+                                                                                                                                                                                     },
+                                                                                                                                                                            "trackingParams":  "CAwQ7ZMBGAIiEwjIvauU6IaUAxWYQUIHHYPjM14=",
+                                                                                                                                                                            "submitEndpoint":  {
+                                                                                                                                                                                                   "clickTrackingParams":  "CAwQ7ZMBGAIiEwjIvauU6IaUAxWYQUIHHYPjM17KAQTyeVgg",
+                                                                                                                                                                                                   "flagEndpoint":  {
+                                                                                                                                                                                                                        "flagAction":  "EAciDwoLMUFrVGtaVDBNXzBQBTILMUFrVGtaVDBNXzCQARSYAQGoAQM%3D"
+                                                                                                                                                                                                                    }
+                                                                                                                                                                                               }
+                                                                                                                                                                        }
+                                                                                                                                   },
+                                                                                                                                   {
+                                                                                                                                       "optionSelectableItemRenderer":  {
+                                                                                                                                                                            "text":  {
+                                                                                                                                                                                         "runs":  [
+                                                                                                                                                                                                      {
+                                                                                                                                                                                                          "text":  "Hostigamiento o acoso"
+                                                                                                                                                                                                      }
+                                                                                                                                                                                                  ]
+                                                                                                                                                                                     },
+                                                                                                                                                                            "trackingParams":  "CAsQ7ZMBGAMiEwjIvauU6IaUAxWYQUIHHYPjM14=",
+                                                                                                                                                                            "submitEndpoint":  {
+                                                                                                                                                                                                   "clickTrackingParams":  "CAsQ7ZMBGAMiEwjIvauU6IaUAxWYQUIHHYPjM17KAQTyeVgg",
+                                                                                                                                                                                                   "flagEndpoint":  {
+                                                                                                                                                                                                                        "flagAction":  "EAciDwoLMUFrVGtaVDBNXzBQBTILMUFrVGtaVDBNXzCQARGYAQGoAQM%3D"
+                                                                                                                                                                                                                    }
+                                                                                                                                                                                               }
+                                                                                                                                                                        }
+                                                                                                                                   },
+                                                                                                                                   {
+                                                                                                                                       "optionSelectableItemRenderer":  {
+                                                                                                                                                                            "text":  {
+                                                                                                                                                                                         "runs":  [
+                                                                                                                                                                                                      {
+                                                                                                                                                                                                          "text":  "Actividades dañinas o peligrosas"
+                                                                                                                                                                                                      }
+                                                                                                                                                                                                  ]
+                                                                                                                                                                                     },
+                                                                                                                                                                            "trackingParams":  "CAoQ7ZMBGAQiEwjIvauU6IaUAxWYQUIHHYPjM14=",
+                                                                                                                                                                            "submitEndpoint":  {
+                                                                                                                                                                                                   "clickTrackingParams":  "CAoQ7ZMBGAQiEwjIvauU6IaUAxWYQUIHHYPjM17KAQTyeVgg",
+                                                                                                                                                                                                   "flagEndpoint":  {
+                                                                                                                                                                                                                        "flagAction":  "EAciDwoLMUFrVGtaVDBNXzBQBTILMUFrVGtaVDBNXzCQAQ2YAQGoAQM%3D"
+                                                                                                                                                                                                                    }
+                                                                                                                                                                                               }
+                                                                                                                                                                        }
+                                                                                                                                   },
+                                                                                                                                   {
+                                                                                                                                       "optionSelectableItemRenderer":  {
+                                                                                                                                                                            "text":  {
+                                                                                                                                                                                         "runs":  [
+                                                                                                                                                                                                      {
+                                                                                                                                                                                                          "text":  "Desinformación"
+                                                                                                                                                                                                      }
+                                                                                                                                                                                                  ]
+                                                                                                                                                                                     },
+                                                                                                                                                                            "trackingParams":  "CAkQ7ZMBGAUiEwjIvauU6IaUAxWYQUIHHYPjM14=",
+                                                                                                                                                                            "submitEndpoint":  {
+                                                                                                                                                                                                   "clickTrackingParams":  "CAkQ7ZMBGAUiEwjIvauU6IaUAxWYQUIHHYPjM17KAQTyeVgg",
+                                                                                                                                                                                                   "flagEndpoint":  {
+                                                                                                                                                                                                                        "flagAction":  "EAciDwoLMUFrVGtaVDBNXzBQBTILMUFrVGtaVDBNXzCQAUGYAQGoAQM%3D"
+                                                                                                                                                                                                                    }
+                                                                                                                                                                                               }
+                                                                                                                                                                        }
+                                                                                                                                   },
+                                                                                                                                   {
+                                                                                                                                       "optionSelectableItemRenderer":  {
+                                                                                                                                                                            "text":  {
+                                                                                                                                                                                         "runs":  [
+                                                                                                                                                                                                      {
+                                                                                                                                                                                                          "text":  "Maltrato infantil"
+                                                                                                                                                                                                      }
+                                                                                                                                                                                                  ]
+                                                                                                                                                                                     },
+                                                                                                                                                                            "trackingParams":  "CAgQ7ZMBGAYiEwjIvauU6IaUAxWYQUIHHYPjM14=",
+                                                                                                                                                                            "submitEndpoint":  {
+                                                                                                                                                                                                   "clickTrackingParams":  "CAgQ7ZMBGAYiEwjIvauU6IaUAxWYQUIHHYPjM17KAQTyeVgg",
+                                                                                                                                                                                                   "flagEndpoint":  {
+                                                                                                                                                                                                                        "flagAction":  "EAciDwoLMUFrVGtaVDBNXzBQBTILMUFrVGtaVDBNXzCQAQyYAQGoAQM%3D"
+                                                                                                                                                                                                                    }
+                                                                                                                                                                                               }
+                                                                                                                                                                        }
+                                                                                                                                   },
+                                                                                                                                   {
+                                                                                                                                       "optionSelectableItemRenderer":  {
+                                                                                                                                                                            "text":  {
+                                                                                                                                                                                         "runs":  [
+                                                                                                                                                                                                      {
+                                                                                                                                                                                                          "text":  "Problema legal"
+                                                                                                                                                                                                      }
+                                                                                                                                                                                                  ]
+                                                                                                                                                                                     },
+                                                                                                                                                                            "trackingParams":  "CAcQ7ZMBGAciEwjIvauU6IaUAxWYQUIHHYPjM14=",
+                                                                                                                                                                            "submitEndpoint":  {
+                                                                                                                                                                                                   "clickTrackingParams":  "CAcQ7ZMBGAciEwjIvauU6IaUAxWYQUIHHYPjM17KAQTyeVgg",
+                                                                                                                                                                                                   "flagEndpoint":  {
+                                                                                                                                                                                                                        "flagAction":  "EAciDwoLMUFrVGtaVDBNXzBQBTILMUFrVGtaVDBNXzCQAUWYAQGoAQM%3D"
+                                                                                                                                                                                                                    }
+                                                                                                                                                                                               }
+                                                                                                                                                                        }
+                                                                                                                                   },
+                                                                                                                                   {
+                                                                                                                                       "optionSelectableItemRenderer":  {
+                                                                                                                                                                            "text":  {
+                                                                                                                                                                                         "runs":  [
+                                                                                                                                                                                                      {
+                                                                                                                                                                                                          "text":  "Fomenta el terrorismo"
+                                                                                                                                                                                                      }
+                                                                                                                                                                                                  ]
+                                                                                                                                                                                     },
+                                                                                                                                                                            "trackingParams":  "CAYQ7ZMBGAgiEwjIvauU6IaUAxWYQUIHHYPjM14=",
+                                                                                                                                                                            "submitEndpoint":  {
+                                                                                                                                                                                                   "clickTrackingParams":  "CAYQ7ZMBGAgiEwjIvauU6IaUAxWYQUIHHYPjM17KAQTyeVgg",
+                                                                                                                                                                                                   "flagEndpoint":  {
+                                                                                                                                                                                                                        "flagAction":  "EAciDwoLMUFrVGtaVDBNXzBQBTILMUFrVGtaVDBNXzCQATWYAQGoAQM%3D"
+                                                                                                                                                                                                                    }
+                                                                                                                                                                                               }
+                                                                                                                                                                        }
+                                                                                                                                   },
+                                                                                                                                   {
+                                                                                                                                       "optionSelectableItemRenderer":  {
+                                                                                                                                                                            "text":  {
+                                                                                                                                                                                         "runs":  [
+                                                                                                                                                                                                      {
+                                                                                                                                                                                                          "text":  "Engañoso o fraudulento"
+                                                                                                                                                                                                      }
+                                                                                                                                                                                                  ]
+                                                                                                                                                                                     },
+                                                                                                                                                                            "trackingParams":  "CAUQ7ZMBGAkiEwjIvauU6IaUAxWYQUIHHYPjM14=",
+                                                                                                                                                                            "submitEndpoint":  {
+                                                                                                                                                                                                   "clickTrackingParams":  "CAUQ7ZMBGAkiEwjIvauU6IaUAxWYQUIHHYPjM17KAQTyeVgg",
+                                                                                                                                                                                                   "flagEndpoint":  {
+                                                                                                                                                                                                                        "flagAction":  "EAciDwoLMUFrVGtaVDBNXzBQBTILMUFrVGtaVDBNXzCQATGYAQGoAQM%3D"
+                                                                                                                                                                                                                    }
+                                                                                                                                                                                               }
+                                                                                                                                                                        }
+                                                                                                                                   }
+                                                                                                                               ],
+                                                                                                                     "trackingParams":  "CAQQ9EoiEwjIvauU6IaUAxWYQUIHHYPjM14="
+                                                                                                                 }
+                                                                                         },
+                                                           "trackingParams":  "CAEQ55sBIhMIyL2rlOiGlAMVmEFCBx2D4zNe",
+                                                           "title":  {
+                                                                         "runs":  [
+                                                                                      {
+                                                                                          "text":  "Denunciar vídeo"
+                                                                                      }
+                                                                                  ]
+                                                                     },
+                                                           "submitButton":  {
+                                                                                "buttonRenderer":  {
+                                                                                                       "style":  "STYLE_BRAND",
+                                                                                                       "isDisabled":  true,
+                                                                                                       "text":  {
+                                                                                                                    "runs":  [
+                                                                                                                                 {
+                                                                                                                                     "text":  "Denunciar"
+                                                                                                                                 }
+                                                                                                                             ]
+                                                                                                                },
+                                                                                                       "trackingParams":  "CAMQ8FsiEwjIvauU6IaUAxWYQUIHHYPjM14="
+                                                                                                   }
+                                                                            },
+                                                           "cancelButton":  {
+                                                                                "buttonRenderer":  {
+                                                                                                       "style":  "STYLE_TEXT",
+                                                                                                       "isDisabled":  false,
+                                                                                                       "text":  {
+                                                                                                                    "runs":  [
+                                                                                                                                 {
+                                                                                                                                     "text":  "Cancelar"
+                                                                                                                                 }
+                                                                                                                             ]
+                                                                                                                },
+                                                                                                       "trackingParams":  "CAIQ8FsiEwjIvauU6IaUAxWYQUIHHYPjM14="
+                                                                                                   }
+                                                                            },
+                                                           "footer":  {
+                                                                          "runs":  [
+                                                                                       {
+                                                                                           "text":  "Si tienes la propiedad de los derechos de autor de este vídeo y crees que se ha subido sin tu permiso, sigue "
+                                                                                       },
+                                                                                       {
+                                                                                           "text":  "estas indicaciones",
+                                                                                           "navigationEndpoint":  {
+                                                                                                                      "clickTrackingParams":  "CAEQ55sBIhMIyL2rlOiGlAMVmEFCBx2D4zNeygEE8nlYIA==",
+                                                                                                                      "urlEndpoint":  {
+                                                                                                                                          "url":  "//support.google.com/youtube/answer/2807622?hl=es"
+                                                                                                                                      }
+                                                                                                                  }
+                                                                                       },
+                                                                                       {
+                                                                                           "text":  " para enviar un aviso de infracción de derechos de autor."
+                                                                                       }
+                                                                                   ]
+                                                                      }
+                                                       }
+                       },
+    "queueContextParams":  "CAEaEVJEQU1WTTFBa1RrWlQwTV8wIMrdq5TohpQDMgsxQWtUa1pUME1fMEoLMUFrVGtaVDBNXzBQAFoECAAQAXgB"
+}

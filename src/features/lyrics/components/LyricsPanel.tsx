@@ -102,81 +102,117 @@ export function LyricsPanel() {
         {isSearching ? (
           <motion.div 
             key="search-panel"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="absolute inset-0 z-30 bg-white/80 dark:bg-[#0A0A0A]/80 backdrop-blur-xl p-4 sm:p-8 flex flex-col overflow-hidden transition-colors"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="absolute inset-0 z-30 bg-black/40 backdrop-blur-[40px] flex flex-col overflow-hidden"
           >
-            <div className="flex justify-between items-center mb-4 sm:mb-8 shrink-0">
-              <h3 className="text-xl sm:text-2xl font-black text-black dark:text-white flex items-center gap-3 tracking-tighter">
-                <Search size={24} className="text-[var(--accent-primary)]" />
-                Búsqueda Manual
-              </h3>
-              <button onClick={() => setIsSearching(false)} className="p-2.5 bg-black/5 dark:bg-white/5 text-black/40 dark:text-white/40 hover:text-red-500 rounded-full transition-all">
-                <X size={22} />
+            {/* Header Sticky */}
+            <div className="shrink-0 p-6 sm:p-10 flex justify-between items-center bg-linear-to-b from-black/20 to-transparent">
+              <div className="flex flex-col">
+                <h3 className="text-2xl sm:text-4xl font-black text-white flex items-center gap-4 tracking-tighter uppercase italic">
+                  <Search size={28} className="text-[var(--accent-primary)]" strokeWidth={3} />
+                  Búsqueda Manual
+                </h3>
+                <p className="text-[10px] sm:text-xs font-bold text-white/40 uppercase tracking-[0.3em] mt-1 ml-11">Encuentra la letra perfecta</p>
+              </div>
+              <button 
+                onClick={() => setIsSearching(false)} 
+                className="w-12 h-12 flex items-center justify-center bg-white/5 hover:bg-red-500/20 text-white/60 hover:text-red-500 rounded-full transition-all border border-white/10 active:scale-90"
+              >
+                <X size={24} />
               </button>
             </div>
 
-            <div className="space-y-3 sm:space-y-4 mb-6 sm:mb-8 shrink-0">
-              <input 
-                value={query.title} 
-                onChange={e => setQuery({...query, title: e.target.value})}
-                placeholder="Título de la canción..."
-                className="w-full bg-black/3 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-2xl px-5 py-3.5 sm:py-4 text-sm sm:text-base text-black dark:text-white placeholder:text-black/20 dark:placeholder:text-white/20 focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)]/20 transition-all font-bold"
-              />
-              <div className="flex gap-2 sm:gap-3">
-                <input 
-                  value={query.artist} 
-                  onChange={e => setQuery({...query, artist: e.target.value})}
-                  placeholder="Artista..."
-                  className="flex-1 bg-black/3 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-2xl px-5 py-3.5 sm:py-4 text-sm sm:text-base text-black dark:text-white placeholder:text-black/20 dark:placeholder:text-white/20 focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)]/20 transition-all font-bold"
-                />
-                <button 
-                  onClick={handleSearch}
-                  disabled={isSearchingOnline}
-                  className="bg-[var(--accent-primary)] hover:bg-[#6D28D9] disabled:opacity-50 text-white rounded-2xl px-6 sm:px-8 font-black transition-all shadow-xl shadow-[var(--accent-primary)]/20 active:scale-95 flex items-center gap-2 uppercase text-[10px] sm:text-xs tracking-widest"
-                >
-                  {isSearchingOnline ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Search size={18} />}
-                  <span className="hidden sm:inline">Buscar</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
-              {searchResults.length > 0 ? (
-                searchResults.map((res) => (
-                  <button 
-                    key={res.id} 
-                    onClick={() => selectLyric(res)}
-                    className="w-full flex items-center justify-between p-5 bg-black/2 dark:bg-white/2 hover:bg-white dark:hover:bg-white/5 border border-black/5 dark:border-white/5 rounded-[24px] transition-all group text-left shadow-sm hover:shadow-xl"
-                  >
-                    <div className="flex-1 min-w-0 pr-6">
-                      <p className="text-black dark:text-white font-black text-lg truncate group-hover:text-[var(--accent-primary)] transition-colors tracking-tight">{res.trackName}</p>
-                      <p className="text-black/40 dark:text-white/40 text-xs font-bold truncate mt-1 uppercase tracking-wider">{res.artistName} {res.albumName ? `• ${res.albumName}` : ''}</p>
-                      <div className="flex items-center gap-3 mt-3">
-                        <span className="text-[10px] bg-black/5 dark:bg-white/5 text-black/40 dark:text-white/40 px-2.5 py-1 rounded-lg flex items-center gap-1.5 font-bold">
-                          <ClockIcon size={12} /> {formatDuration(res.duration)}
-                        </span>
-                        {res.syncedLyrics && (
-                          <span className="text-[10px] bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] px-2.5 py-1 rounded-lg font-black tracking-widest flex items-center gap-1.5 border border-[var(--accent-primary)]/20">
-                            <Check size={12} strokeWidth={4} /> SINCRONIZADA
-                          </span>
-                        )}
-                      </div>
+            {/* Content Scrollable to handle keyboard on mobile */}
+            <div className="flex-1 overflow-y-auto px-6 sm:px-10 pb-10 custom-scrollbar">
+              <div className="max-w-3xl mx-auto space-y-8">
+                {/* Search Form */}
+                <div className="grid grid-cols-1 gap-4 p-1">
+                  <div className="relative group">
+                    <input 
+                      value={query.title} 
+                      onChange={e => setQuery({...query, title: e.target.value})}
+                      placeholder="Nombre de la canción..."
+                      className="w-full bg-white/5 border border-white/10 rounded-3xl px-8 py-5 text-lg text-white placeholder:text-white/20 focus:outline-none focus:ring-4 focus:ring-[var(--accent-primary)]/20 focus:border-[var(--accent-primary)]/40 transition-all font-bold shadow-2xl"
+                    />
+                    <div className="absolute right-6 top-1/2 -translate-y-1/2 text-white/10 group-focus-within:text-[var(--accent-primary)]/30 transition-colors">
+                       <Music size={24} />
                     </div>
-                    <div className="w-12 h-12 flex items-center justify-center bg-[var(--accent-primary)] text-white rounded-xl shadow-lg opacity-0 lg:group-hover:opacity-100 transition-all scale-75 group-hover:scale-100">
-                      <Music size={20} />
-                    </div>
-                  </button>
-                ))
-              ) : !isSearchingOnline && (
-                <div className="text-center py-32 opacity-10 space-y-6">
-                  <div className="w-24 h-24 bg-black/5 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto">
-                    <Search size={48} />
                   </div>
-                  <p className="text-xl font-black tracking-tighter">Explora las letras</p>
+
+                  <div className="flex flex-col sm:flex-row gap-4">
+                    <input 
+                      value={query.artist} 
+                      onChange={e => setQuery({...query, artist: e.target.value})}
+                      placeholder="Artista..."
+                      className="flex-1 bg-white/5 border border-white/10 rounded-3xl px-8 py-5 text-lg text-white placeholder:text-white/20 focus:outline-none focus:ring-4 focus:ring-[var(--accent-primary)]/20 focus:border-[var(--accent-primary)]/40 transition-all font-bold shadow-2xl"
+                    />
+                    <button 
+                      onClick={handleSearch}
+                      disabled={isSearchingOnline}
+                      className="bg-[var(--accent-primary)] hover:brightness-125 disabled:opacity-50 text-white rounded-3xl px-10 py-5 font-black transition-all shadow-2xl shadow-[var(--accent-primary)]/40 active:scale-95 flex items-center justify-center gap-3 uppercase text-xs tracking-[0.2em] min-w-[160px]"
+                    >
+                      {isSearchingOnline ? (
+                        <div className="w-5 h-5 border-3 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <>
+                          <Search size={20} strokeWidth={3} />
+                          <span>Buscar</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
-              )}
+
+                {/* Results Section */}
+                <div className="space-y-4 pt-4">
+                  {searchResults.length > 0 ? (
+                    searchResults.map((res, idx) => (
+                      <motion.button 
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: idx * 0.05 }}
+                        key={res.id} 
+                        onClick={() => selectLyric(res)}
+                        className="w-full flex items-center justify-between p-6 bg-white/3 hover:bg-white/10 border border-white/5 hover:border-white/20 rounded-[32px] transition-all group text-left shadow-lg hover:shadow-2xl"
+                      >
+                        <div className="flex-1 min-w-0 pr-6">
+                          <h4 className="text-white font-black text-xl sm:text-2xl truncate group-hover:text-[var(--accent-primary)] transition-colors tracking-tighter">
+                            {res.trackName}
+                          </h4>
+                          <div className="flex items-center gap-2 mt-2">
+                             <p className="text-[var(--accent-primary)] text-[10px] font-black uppercase tracking-widest brightness-150">{res.artistName}</p>
+                             {res.albumName && <span className="text-white/20 text-[10px] font-black">•</span>}
+                             <p className="text-white/40 text-[10px] font-bold truncate uppercase tracking-wider">{res.albumName}</p>
+                          </div>
+                          
+                          <div className="flex items-center gap-4 mt-4">
+                            <span className="text-[10px] font-bold text-white/30 flex items-center gap-1.5 bg-white/5 px-3 py-1.5 rounded-full">
+                              <ClockIcon size={12} /> {formatDuration(res.duration)}
+                            </span>
+                            {res.syncedLyrics && (
+                              <span className="text-[10px] bg-[var(--accent-primary)] text-white px-3 py-1.5 rounded-full font-black tracking-widest flex items-center gap-1.5 shadow-lg shadow-[var(--accent-primary)]/20">
+                                <Check size={12} strokeWidth={4} /> SINCRONIZADA
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="w-14 h-14 flex items-center justify-center bg-white/5 group-hover:bg-[var(--accent-primary)] text-white rounded-2xl transition-all scale-90 group-hover:scale-100 shadow-xl border border-white/10 group-hover:border-transparent">
+                          <Music size={24} />
+                        </div>
+                      </motion.button>
+                    ))
+                  ) : !isSearchingOnline && (
+                    <div className="text-center py-20 opacity-20 space-y-6">
+                      <div className="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center mx-auto border border-white/10 animate-pulse">
+                        <Search size={40} />
+                      </div>
+                      <p className="text-xl font-black tracking-tighter uppercase italic">Explora la base de datos</p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </motion.div>
         ) : null}

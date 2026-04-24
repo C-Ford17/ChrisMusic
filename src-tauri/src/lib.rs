@@ -20,7 +20,8 @@ pub fn run() {
       commands::save_cookies_cmd,
       commands::test_ytdlp,
       commands::get_artist_details_cmd,
-      commands::get_album_details_cmd
+      commands::get_album_details_cmd,
+      commands::get_song_details_cmd
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

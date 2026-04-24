@@ -103,6 +103,56 @@ pub struct ArtistDetails {
     playlists: Vec<SearchResult>,
 }
 
+#[tauri::command]
+pub async fn get_song_details_cmd(video_id: String) -> Result<SearchResult, String> {
+    println!("CHRIS_LOG: get_song_details_cmd for {}", video_id);
+    let body = serde_json::json!({
+        "context": get_innertube_context(),
+        "videoId": video_id
+    });
+
+    if let Ok(data) = innertube_request("next", body).await {
+        let mut panel = &data["contents"]["singleColumnMusicWatchNextResultsRenderer"]["tabbedRenderer"]["watchNextTabRenderer"]["content"]["musicQueueRenderer"]["content"]["playlistPanelRenderer"];
+        
+        // Try alternate path for certain videos/regions
+        if panel.is_null() {
+            panel = &data["contents"]["singleColumnMusicWatchNextResultsRenderer"]["tabbedRenderer"]["watchNextTabbedResultsRenderer"]["tabs"][0]["tabRenderer"]["content"]["musicQueueRenderer"]["content"]["playlistPanelRenderer"];
+        }
+
+        // Find the video in the queue panel
+        let video_entry = panel["contents"].as_array()
+            .and_then(|c| c.iter().find(|x| x["playlistPanelVideoRenderer"]["videoId"].as_str() == Some(&video_id)))
+            .map(|x| &x["playlistPanelVideoRenderer"])
+            .or_else(|| {
+                let first = &panel["contents"][0]["playlistPanelVideoRenderer"];
+                if !first.is_null() { Some(first) } else { None }
+            });
+
+        if let Some(v) = video_entry {
+            let title = v["title"]["runs"][0]["text"].as_str().unwrap_or_default().to_string();
+            let artist = v["longBylineText"]["runs"][0]["text"].as_str()
+                .or_else(|| v["shortBylineText"]["runs"][0]["text"].as_str())
+                .unwrap_or_default().to_string();
+            let thumb = v["thumbnail"]["thumbnails"].as_array()
+                .and_then(|t| t.last())
+                .and_then(|t| t["url"].as_str())
+                .unwrap_or_default().to_string();
+            let duration_text = v["lengthText"]["runs"][0]["text"].as_str().map(|s| s.to_string());
+
+            return Ok(SearchResult {
+                id: video_id.clone(),
+                title,
+                artist_name: artist,
+                thumbnail_url: if thumb.is_empty() { format!("https://img.youtube.com/vi/{}/mqdefault.jpg", video_id) } else { thumb },
+                source_type: "youtube".to_string(),
+                result_type: "song".to_string(),
+                name: None, is_explicit: None, duration_text, view_count_text: None, view_count: None, raw_info: None,
+            });
+        }
+    }
+    Err("Could not fetch song details from InnerTube".to_string())
+}
+
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AlbumDetails {

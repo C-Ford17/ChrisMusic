@@ -143,7 +143,34 @@ export function SearchContent() {
     setTopResult(null);
     setLastSearchedQuery(searchTerm.trim());
 
-    // Update URL
+    // 1. Detect and Resolve YouTube URLs directly
+    if (!isAppend) {
+      const resolved = youtubeExtractionService.resolveUrl(searchTerm.trim());
+      if (resolved) {
+        if (resolved.type === 'song') {
+          try {
+            const details = await youtubeExtractionService.getSongDetails(resolved.id);
+            if (details) {
+              setResults([details as any]);
+              setTopResult(details as any);
+              setLoading(false);
+              return;
+            }
+          } catch (e) {
+            console.error("Failed to resolve video details directly:", e);
+          }
+        } else {
+          // Redirect to specific pages for collections
+          setLoading(false);
+          if (resolved.type === 'playlist') router.push(`/library/playlist?id=${resolved.id}`);
+          else if (resolved.type === 'album') router.push(`/album?id=${resolved.id}`);
+          else if (resolved.type === 'artist') router.push(`/artist?id=${resolved.id}`);
+          return;
+        }
+      }
+    }
+
+    // Update URL for normal search
     const params = new URLSearchParams();
     params.set('q', searchTerm.trim());
     params.set('tab', targetTab);

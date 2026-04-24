@@ -404,16 +404,10 @@ export class YouTubeExtractionService {
         client: { clientName: 'WEB_REMIX', clientVersion: '1.20241028.01.00', hl: 'es', gl: 'US' }
       };
       const body: any = continuation
-        ? { context, continuation }
-        : { context, query, params: PARAMS[filter] ?? '' };
+        ? { continuation }
+        : { query, params: PARAMS[filter] ?? '' };
 
-      const res = await fetch('https://music.youtube.com/youtubei/v1/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error(`InnerTube HTTP ${res.status}`);
-      const data = await res.json();
+      const data = await this.innerTubeRequest(continuation ? 'browse' : 'search', body);
 
       const results: MusicSearchResult[] = [];
       const seen = new Set<string>();
@@ -585,13 +579,7 @@ export class YouTubeExtractionService {
     }
     // Android / Web — InnerTube browse
     try {
-      const ctx = { client: { clientName: 'WEB_REMIX', clientVersion: '1.20241028.01.00', hl: 'es', gl: 'US' } };
-      const res = await fetch('https://music.youtube.com/youtubei/v1/browse', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ context: ctx, browseId: id }),
-      });
-      if (!res.ok) return null;
-      const data = await res.json();
+      const data = await this.innerTubeRequest('browse', { browseId: id });
 
       // Header
       const header = data?.header?.musicImmersiveHeaderRenderer ?? data?.header?.musicVisualHeaderRenderer ?? null;
@@ -660,13 +648,7 @@ export class YouTubeExtractionService {
     }
     // Android / Web — InnerTube browse
     try {
-      const ctx = { client: { clientName: 'WEB_REMIX', clientVersion: '1.20241028.01.00', hl: 'es', gl: 'US' } };
-      const res = await fetch('https://music.youtube.com/youtubei/v1/browse', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ context: ctx, browseId: id }),
-      });
-      if (!res.ok) return null;
-      const data = await res.json();
+      const data = await this.innerTubeRequest('browse', { browseId: id });
 
       // Header
       const hdr = data?.contents?.twoColumnBrowseResultsRenderer?.tabs?.[0]
@@ -714,6 +696,124 @@ export class YouTubeExtractionService {
       console.error('[getAlbumDetails] InnerTube error:', e);
       return null;
     }
+  }
+
+  /**
+   * Internal helper for InnerTube API calls. 
+   * Uses CapacitorHttp on Android to bypass CORS.
+   */
+  private async innerTubeRequest(endpoint: string, body: any) {
+    const url = `https://music.youtube.com/youtubei/v1/${endpoint}`;
+    const context = { client: { clientName: 'WEB_REMIX', clientVersion: '1.20241028.01.00', hl: 'es', gl: 'US' } };
+    const fullBody = { context, ...body };
+
+    if (YouTubeExtractionService.isAndroid()) {
+      try {
+        const { CapacitorHttp } = await import('@capacitor/core');
+        const response = await CapacitorHttp.request({
+          method: 'POST',
+          url,
+          headers: { 'Content-Type': 'application/json' },
+          data: fullBody
+        });
+        return response.data;
+      } catch (e) {
+        console.error(`[innerTubeRequest] CapacitorHttp failed for ${endpoint}:`, e);
+        throw e;
+      }
+    }
+
+    // Web/Browser/Fallback
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fullBody)
+    });
+    if (!res.ok) throw new Error(`InnerTube Error ${res.status}`);
+    return await res.json();
+  }
+
+  /**
+   * Resolves a YouTube URL to its metadata.
+   */
+  async getSongDetails(videoId: string): Promise<Song | null> {
+    // ── Tauri (Desktop) ──────────────────────────────────────────────────────
+    if (YouTubeExtractionService.isTauri()) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        const details: any = await invoke('get_song_details_cmd', { videoId });
+        return {
+          ...details,
+          sourceType: 'youtube',
+          resultType: 'song'
+        };
+      } catch (error) {
+        console.error('Tauri getSongDetails Error:', error);
+      }
+    }
+
+    // ── Android / Web ────────────────────────────────────────────────────────
+    try {
+      const data = await this.innerTubeRequest('next', { videoId });
+      let panel = data?.contents?.singleColumnMusicWatchNextResultsRenderer?.tabbedRenderer?.watchNextTabRenderer?.content?.musicQueueRenderer?.content?.playlistPanelRenderer;
+      
+      // Try alternate path if first fails
+      if (!panel) {
+        panel = data?.contents?.singleColumnMusicWatchNextResultsRenderer?.tabbedRenderer?.watchNextTabbedResultsRenderer?.tabs?.[0]?.tabRenderer?.content?.musicQueueRenderer?.content?.playlistPanelRenderer;
+      }
+
+      const videoEntry = panel?.contents?.find((c: any) => c?.playlistPanelVideoRenderer?.videoId === videoId)?.playlistPanelVideoRenderer
+                      ?? panel?.contents?.[0]?.playlistPanelVideoRenderer;
+
+      if (!videoEntry) throw new Error("No video entry found in panel");
+
+      return {
+        id: videoId,
+        title: videoEntry.title?.runs?.[0]?.text ?? '',
+        artistName: videoEntry.longBylineText?.runs?.[0]?.text ?? videoEntry.shortBylineText?.runs?.[0]?.text ?? '',
+        thumbnailUrl: videoEntry.thumbnail?.thumbnails?.slice(-1)[0]?.url ?? `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
+        sourceType: 'youtube',
+        resultType: 'song',
+        durationText: videoEntry.lengthText?.runs?.[0]?.text ?? ''
+      } as any;
+    } catch (e) {
+      console.error('[getSongDetails] Error:', e);
+      // Fallback: Return a skeleton if we have the ID but couldn't fetch details
+      return {
+        id: videoId,
+        title: `YouTube Music (ID: ${videoId})`,
+        artistName: 'Unknown Artist',
+        thumbnailUrl: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
+        sourceType: 'youtube',
+        resultType: 'song'
+      } as any;
+    }
+  }
+
+  /**
+   * Intercepts a URL and returns type/id.
+   */
+  resolveUrl(url: string): { type: 'song' | 'playlist' | 'album' | 'artist', id: string } | null {
+    if (!url.includes('http') && url.length !== 11) return null;
+    
+    const videoIdMatch = url.match(/(?:v=|youtu\.be\/|vi\/|watch\/)([^&?#/ ]{11})/);
+    const playlistIdMatch = url.match(/[&?]list=([^&?#/ ]+)/);
+    const browseIdMatch = url.match(/browse\/([^&?#/ ]+)/);
+    const channelIdMatch = url.match(/channel\/([^&?#/ ]+)/);
+
+    if (videoIdMatch) return { type: 'song', id: videoIdMatch[1] };
+    if (playlistIdMatch) return { type: 'playlist', id: playlistIdMatch[1] };
+    if (browseIdMatch) {
+       const id = browseIdMatch[1];
+       if (id.startsWith('UC') || id.startsWith('FMr')) return { type: 'artist', id };
+       return { type: 'album', id };
+    }
+    if (channelIdMatch) return { type: 'artist', id: channelIdMatch[1] };
+    
+    // Check if it's a raw video ID
+    if (/^[a-zA-Z0-9_-]{11}$/.test(url)) return { type: 'song', id: url };
+
+    return null;
   }
 }
 

@@ -28,3 +28,8 @@ commands.allow = ["get_artist_details_cmd"]
 identifier = "allow-get-album-details-cmd"
 description = "Allow getting album details"
 commands.allow = ["get_album_details_cmd"]
+
+[[permission]]
+identifier = "allow-get-song-details-cmd"
+description = "Allow getting song details"
+commands.allow = ["get_song_details_cmd"]

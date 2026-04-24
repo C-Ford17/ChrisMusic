@@ -51,6 +51,7 @@
     "allow-test-ytdlp",
     "allow-get-artist-details-cmd",
     "allow-get-album-details-cmd",
+    "allow-get-song-details-cmd",
     "updater:default",
     "updater:allow-check"
   ]
