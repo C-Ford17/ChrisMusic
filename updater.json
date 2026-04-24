@@ -1,10 +1,10 @@
 {
   "version": "1.0.11",
   "notes": "v1.0.11: Estabilización de búsqueda, integración total de playlists y optimización para móvil.",
-  "pub_date": "2026-04-24T00:00:00Z",
+  "pub_date": "2026-04-24T14:37:24Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUR3B1OFN2ZzZwSytSZ3N0QXRqNWppNUFES3U1eFFOdTg3ckVObXBVR0xJQkdWREkvcGpMR0pUbGR2OEFRN1ZJOHFSY3pLSFIyaHVicTV0KzEydTNubHVuWENlYTVyU2c0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc2NDc3MDM4CWZpbGU6Q2hyaXNNdXNpY18xLjAuMTBfeDY0LXNldHVwLmV4ZQpvY3BEaWNkQkZidTJ6aGVmM3Y4K0VxYnlEc2ZmTTZ3eVZOZXQ4c2NGdmNoZFhwY2YyY3ZKaUMvd1FkMmI3OXl6RjZyNTFWczBXbnVudUJYRU8wR1ZEQT09Cg==",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUR3B1OFN2ZzZwSzdzb25pd2lLZTJmMi9XY1lPWnRyOS8zYWFqOEJ0cmxYdU5Rc21FdThIUy9hY2tnOGplT1V6WWxMWmkzNSsvdHZXS1NVMkU2SWpyQlFvNUtOV0lNWkFVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc3MDQxNDQ0CWZpbGU6Q2hyaXNNdXNpY18xLjAuMTFfeDY0LXNldHVwLmV4ZQpNL1huM09PZHh2MmVLL2VhdmJHaURNY3JoWTl0eGRNWlY3K282WGhKVWVmTXRhM3h3a3IrREJaZ0pkZVpPR3d1SzAyZEJDS0ExRWxkWitSaWk2TXpEdz09Cg==",
       "url": "https://github.com/C-Ford17/ChrisMusic/releases/download/tauri-1.0.11/ChrisMusic_1.0.11_x64-setup.exe"
     }
   },
