@@ -25,6 +25,7 @@ interface PlayerState {
   lyrics: LyricsLine[] | null;
   isLyricsLoading: boolean;
   showLyrics: boolean;
+  isSearchingLyrics: boolean;
   isCaching: string | null; // ID of the song being cached
   isBuffering: boolean;
   prefetchingId: string | null;
@@ -83,6 +84,7 @@ export const usePlayerStore = create<PlayerState>()(
       lyrics: null,
       isLyricsLoading: false,
       showLyrics: false,
+      isSearchingLyrics: false,
       isCaching: null,
       isBuffering: false,
       prefetchingId: null,
@@ -518,8 +520,6 @@ export const usePlayerStore = create<PlayerState>()(
         }
       },
 
-      showLyrics: false,
-      isSearchingLyrics: false,
       setIsSearchingLyrics: (isSearching: boolean) => set({ isSearchingLyrics: isSearching }),
       setShowLyrics: (show: boolean) => set({ showLyrics: show }),
       setIsBuffering: (isBuffering: boolean) => set({ isBuffering }),
