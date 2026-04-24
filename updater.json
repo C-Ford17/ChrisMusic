@@ -1,17 +1,17 @@
 {
-  "version": "1.0.12",
+  "version": "1.0.13",
   "notes": "v1.0.11: Estabilización de búsqueda, integración total de playlists y optimización para móvil.",
   "pub_date": "2026-04-24T16:14:35Z",
   "platforms": {
     "windows-x86_64": {
       "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUR3B1OFN2ZzZwSzhVaFZOeHQ0VXUwNmVGRyszSlRzS05PTVF5YytQZGJMMWJaaGptREJMVW0zZUIrUlBoOEY0dVE4NWJNQlVyNUg2S2k1MlRiMnlqVU9GV1Z3eTg4NXc0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc3MDQ3Mjc0CWZpbGU6Q2hyaXNNdXNpY18xLjAuMTJfeDY0LXNldHVwLmV4ZQpQYnNVZ0Y5akJVNmhuTHplVFp0a2pITlJqRkhxbFpEYWVxUUdsVFdhZjBIcG02VVB1dVYvVHhZVzQ2SnhUNUxXY1BSL1N0ditkLzl1RzVqVzFFWENEdz09Cg==",
-      "url": "https://github.com/C-Ford17/ChrisMusic/releases/download/tauri-1.0.12/ChrisMusic_1.0.12_x64-setup.exe"
+      "url": "https://github.com/C-Ford17/ChrisMusic/releases/download/tauri-1.0.13/ChrisMusic_1.0.13_x64-setup.exe"
     }
   },
   "android": {
     "version": "1.0.7",
     "url": "https://github.com/C-Ford17/ChrisMusic/releases/download/native-1.0.7/app-release.apk",
-    "web_version": "1.0.12",
-    "web_url": "https://github.com/C-Ford17/ChrisMusic/releases/download/1.0.12/dist.zip"
+    "web_version": "1.0.13",
+    "web_url": "https://github.com/C-Ford17/ChrisMusic/releases/download/1.0.13/dist.zip"
   }
 }
