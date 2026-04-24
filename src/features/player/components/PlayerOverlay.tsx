@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { usePlayerStore } from '../store/playerStore';
 import { audioEngine } from '../services/audioEngine';
 import { 
@@ -439,7 +440,7 @@ export function PlayerOverlay() {
 
                 {/* Panel de Controles Multifila Estilo RiMusic */}
                 <AnimatePresence>
-                  {!isSearchingLyrics && (
+                  {(!isSearchingLyrics || !Capacitor.isNativePlatform()) && (
                     <motion.div 
                       key="player-controls"
                       initial={{ opacity: 1, y: 0 }}
