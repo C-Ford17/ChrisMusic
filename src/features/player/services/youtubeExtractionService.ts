@@ -275,43 +275,16 @@ export class YouTubeExtractionService {
 
   async search(query: string, count: number = 15): Promise<Song[]> {
     await this.ensureInitialized();
-
-    if (YouTubeExtractionService.isAndroid()) {
-      try {
-        console.log(`[YouTubeExtractionService] Using Native ytsearch for: ${query}`);
-        const result = await YouTubeNative.search({ query, count });
-        return result.results.map((item: any) => ({
-          id: item.id,
-          title: item.title,
-          artistName: item.artistName,
-          thumbnailUrl: item.thumbnailUrl,
-          duration: item.duration,
-          sourceType: 'youtube'
-        }));
-      } catch (e) {
-        console.error('[YouTubeExtractionService] Native search failed:', e);
-        throw e;
-      }
-    }
-
-    // Tauri Native Search
-    if (YouTubeExtractionService.isTauri()) {
-      try {
-        const { invoke } = await import('@tauri-apps/api/core');
-        const response: any = await invoke('search_youtube_native_cmd', { query, count, filter: 'song' });
-        const results = response.results || [];
-        return results.map((item: any) => ({
-          id: item.id,
-          title: item.title,
-          artistName: item.artistName,
-          thumbnailUrl: item.thumbnailUrl,
-          duration: 0,
-          sourceType: 'youtube'
-        }));
-      } catch (error) {
-        console.error('Tauri Search Error:', error);
-      }
-    }
+    const { results } = await this.searchWithType(query, 'song', count);
+    return results.map(r => ({
+      id: r.id,
+      title: r.title,
+      artistName: r.artistName,
+      thumbnailUrl: r.thumbnailUrl,
+      duration: 0,
+      sourceType: 'youtube'
+    }));
+  }
 
     // Fallback for JS web
     if (this.yt) {
@@ -472,6 +445,12 @@ export class YouTubeExtractionService {
           continue;
         }
 
+        // musicCardShelfRenderer → Top Result card
+        if (cur.musicCardShelfRenderer) {
+          queue.push(...[...(cur.musicCardShelfRenderer.contents ?? [])].reverse());
+          continue;
+        }
+
         // musicResponsiveListItemRenderer → songs / albums / artists / playlists (list view)
         if (cur.musicResponsiveListItemRenderer) {
           const r = cur.musicResponsiveListItemRenderer;
@@ -551,6 +530,35 @@ export class YouTubeExtractionService {
             name: isArtist ? title : undefined,
           } as any);
           if (results.length >= count) break;
+          continue;
+        }
+
+        // musicTwoRowItemRenderer → alternative card view
+        if (cur.musicTwoRowItemRenderer) {
+          const r = cur.musicTwoRowItemRenderer;
+          const title = r.title?.runs?.[0]?.text ?? '';
+          const videoId = r.navigationEndpoint?.watchEndpoint?.videoId ?? '';
+          const browseId = r.navigationEndpoint?.browseEndpoint?.browseId ?? '';
+          const thumbArr: any[] = r.thumbnailRenderer?.musicThumbnailRenderer?.thumbnail?.thumbnails ?? r.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails ?? [];
+          const thumb = thumbArr[thumbArr.length - 1]?.url ?? '';
+          const id = videoId || browseId;
+
+          if (id && !results.some(x => x.id === id)) {
+            let actualType = filter === 'playlist' ? 'playlist' : 'song';
+            const subtitle = r.subtitle?.runs?.[0]?.text?.toLowerCase() ?? '';
+            if (subtitle.includes('artista') || subtitle.includes('artist')) actualType = 'artist';
+            else if (subtitle.includes('álbum') || subtitle.includes('album')) actualType = 'album';
+            else if (subtitle.includes('lista') || subtitle.includes('playlist')) actualType = 'playlist';
+
+            results.push({
+              id,
+              title,
+              artistName: r.subtitle?.runs?.find((x: any) => x.navigationEndpoint?.browseEndpoint?.browseId?.startsWith('UC'))?.text ?? r.subtitle?.runs?.[2]?.text ?? '',
+              thumbnailUrl: thumb,
+              sourceType: 'youtube',
+              resultType: actualType
+            });
+          }
           continue;
         }
 
