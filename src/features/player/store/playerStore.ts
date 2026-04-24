@@ -62,6 +62,7 @@ interface PlayerState {
   setIsBuffering: (isBuffering: boolean) => void;
   prefetchNext: () => Promise<void>;
   setAudioSource: (source: 'youtube' | 'cache' | 'download' | null) => void;
+  setQueue: (queue: Song[]) => void;
   clearPlayerState: () => void;
 }
 
@@ -555,6 +556,8 @@ export const usePlayerStore = create<PlayerState>()(
       },
 
       setAudioSource: (source) => set({ audioSource: source }),
+
+      setQueue: (queue: Song[]) => set({ queue }),
 
       clearPlayerState: () => {
         audioEngine.pause();

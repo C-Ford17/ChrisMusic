@@ -49,6 +49,8 @@
     "allow-get-streaming-url",
     "allow-download-to-disk",
     "allow-test-ytdlp",
+    "allow-get-artist-details-cmd",
+    "allow-get-album-details-cmd",
     "updater:default",
     "updater:allow-check"
   ]

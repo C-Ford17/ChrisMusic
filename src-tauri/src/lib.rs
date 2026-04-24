@@ -1,4 +1,3 @@
-use tauri::Manager;
 mod commands;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -19,7 +18,9 @@ pub fn run() {
       commands::search_youtube_native_cmd,
       commands::get_streaming_url,
       commands::save_cookies_cmd,
-      commands::test_ytdlp
+      commands::test_ytdlp,
+      commands::get_artist_details_cmd,
+      commands::get_album_details_cmd
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

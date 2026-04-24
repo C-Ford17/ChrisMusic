@@ -1,5 +1,5 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
-import { type Song } from '@/core/types/music';
+import { type Song, type Artist, type Album, type SearchResult as MusicSearchResult } from '@/core/types/music';
 
 interface YouTubeNativePlugin {
   init(): Promise<{ status: string; ffmpeg: string; ffmpegPath: string }>;
@@ -298,18 +298,18 @@ export class YouTubeExtractionService {
     if (YouTubeExtractionService.isTauri()) {
       try {
         const { invoke } = await import('@tauri-apps/api/core');
-        const result: any[] = await invoke('search_youtube_native_cmd', { query });
-        return result.map((item: any) => ({
+        const response: any = await invoke('search_youtube_native_cmd', { query, count, filter: 'song' });
+        const results = response.results || [];
+        return results.map((item: any) => ({
           id: item.id,
           title: item.title,
           artistName: item.artistName,
           thumbnailUrl: item.thumbnailUrl,
-          duration: 0, // Tauri search doesn't return duration yet
+          duration: 0,
           sourceType: 'youtube'
         }));
-      } catch (e) {
-        console.error('[YouTubeExtractionService] Tauri search failed:', e);
-        throw e;
+      } catch (error) {
+        console.error('Tauri Search Error:', error);
       }
     }
 
@@ -401,6 +401,313 @@ export class YouTubeExtractionService {
     }
 
     throw new Error(`Could not extract stream URL for ${videoId} in ${YouTubeExtractionService.getEnv()} environment.`);
+  }
+
+  async searchWithType(query: string, filter: 'song' | 'artist' | 'album' | 'playlist', count: number = 20, continuation?: string): Promise<{ results: MusicSearchResult[], continuation?: string }> {
+    // ── Tauri (Desktop) ──────────────────────────────────────────────────────
+    if (YouTubeExtractionService.isTauri()) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        const response: any = await invoke('search_youtube_native_cmd', { query, count, filter, continuation });
+        return {
+          results: response.results.map((item: any) => ({ ...item, sourceType: 'youtube' })),
+          continuation: response.continuation
+        };
+      } catch (error) {
+        console.error('Tauri SearchWithType Error:', error);
+        return { results: [] };
+      }
+    }
+
+    // ── Android / Web — InnerTube direct ─────────────────────────────────────
+    try {
+      const PARAMS: Record<string, string> = {
+        song:     'EgWKAQIIAWoMEAMQDhAKEAkQBRAV',
+        album:    'EgWKAQIYAWoMEAMQDhAKEAkQBRAV',
+        artist:   'EgWKAQIgAWoMEAMQDhAKEAkQBRAV',
+        playlist: 'EgWKAQIoAWoMEAMQDhAKEAkQBRAV',
+      };
+      const context = {
+        client: { clientName: 'WEB_REMIX', clientVersion: '1.20241028.01.00', hl: 'es', gl: 'US' }
+      };
+      const body: any = continuation
+        ? { context, continuation }
+        : { context, query, params: PARAMS[filter] ?? '' };
+
+      const res = await fetch('https://music.youtube.com/youtubei/v1/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(`InnerTube HTTP ${res.status}`);
+      const data = await res.json();
+
+      const results: MusicSearchResult[] = [];
+      const seen = new Set<string>();
+      let nextContinuation: string | undefined;
+
+      // Resolve root node
+      const root = data?.contents?.tabbedSearchResultsRenderer
+        ? data.contents.tabbedSearchResultsRenderer.tabs?.[0]?.tabRenderer?.content
+        : (data?.continuationContents ?? data);
+
+      const queue: any[] = [root ?? data];
+
+      while (queue.length > 0) {
+        const cur = queue.pop();
+        if (!cur || typeof cur !== 'object') continue;
+
+        if (Array.isArray(cur)) { queue.push(...[...cur].reverse()); continue; }
+
+        // Continuation token
+        const contToken =
+          cur?.nextContinuationData?.continuation ??
+          cur?.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token ??
+          cur?.musicShelfRenderer?.continuations?.[0]?.nextContinuationData?.continuation;
+        if (contToken) nextContinuation = contToken;
+
+        // musicShelfRenderer → song list items
+        if (cur.musicShelfRenderer) {
+          queue.push(...[...(cur.musicShelfRenderer.contents ?? [])].reverse());
+          continue;
+        }
+
+        // musicResponsiveListItemRenderer → songs / albums / artists / playlists (list view)
+        if (cur.musicResponsiveListItemRenderer) {
+          const r = cur.musicResponsiveListItemRenderer;
+          const flexCols: any[] = r.flexColumns ?? [];
+          const title = flexCols[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text ?? '';
+          const videoId = r.playlistItemData?.videoId
+            ?? r.navigationEndpoint?.watchEndpoint?.videoId ?? '';
+          const browseId = r.navigationEndpoint?.browseEndpoint?.browseId ?? '';
+
+          let actualType = filter === 'playlist' ? 'playlist' : 'song';
+          let artistName = '';
+          for (const col of flexCols) {
+            for (const run of col?.musicResponsiveListItemFlexColumnRenderer?.text?.runs ?? []) {
+              const t = (run.text ?? '').trim().toLowerCase();
+              if (t === 'álbum' || t === 'album') actualType = 'album';
+              else if (t === 'artista' || t === 'artist') actualType = 'artist';
+              else if (t === 'lista de reproducción' || t === 'playlist') actualType = 'playlist';
+              const bId = run.navigationEndpoint?.browseEndpoint?.browseId ?? '';
+              if ((bId.startsWith('UC') || bId.startsWith('FMr')) && !artistName) {
+                artistName = run.text ?? '';
+              }
+            }
+          }
+
+          const thumb = r.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails?.slice(-1)[0]?.url ?? '';
+          const id = videoId || browseId;
+          if (!id || seen.has(id)) continue;
+          seen.add(id);
+
+          results.push({
+            id,
+            title,
+            artistName: artistName || title,
+            thumbnailUrl: videoId ? `https://img.youtube.com/vi/${videoId}/mqdefault.jpg` : thumb,
+            sourceType: 'youtube',
+            resultType: actualType,
+          } as any);
+          if (results.length >= count) break;
+          continue;
+        }
+
+        // musicTwoRowItemRenderer → albums / artists / playlists (card view)
+        if (cur.musicTwoRowItemRenderer) {
+          const r = cur.musicTwoRowItemRenderer;
+          const title = r.title?.runs?.[0]?.text ?? '';
+          const browseId = r.navigationEndpoint?.browseEndpoint?.browseId ?? '';
+          if (!browseId || seen.has(browseId)) continue;
+
+          const isArtist = browseId.startsWith('UC') || browseId.startsWith('FMr');
+          const isPlaylist = browseId.startsWith('VL') || browseId.startsWith('PL');
+          const resType = isArtist ? 'artist' : isPlaylist ? 'playlist' : 'album';
+
+          // Skip if doesn't match requested filter
+          if (filter === 'album'    && resType !== 'album')    { seen.add(browseId); continue; }
+          if (filter === 'artist'   && resType !== 'artist')   { seen.add(browseId); continue; }
+          if (filter === 'playlist' && resType !== 'playlist') { seen.add(browseId); continue; }
+          if (filter === 'song'     && (resType === 'album' || resType === 'artist')) { seen.add(browseId); continue; }
+
+          const thumb = r.thumbnailRenderer?.musicThumbnailRenderer?.thumbnail?.thumbnails?.slice(-1)[0]?.url ?? '';
+          let artistName = title;
+          for (const run of r.subtitle?.runs ?? []) {
+            const bId = run.navigationEndpoint?.browseEndpoint?.browseId ?? '';
+            if (bId.startsWith('UC') || bId.startsWith('FMr')) { artistName = run.text ?? artistName; break; }
+            if (isPlaylist && run.text && run.text.trim() !== '•' && artistName === title) {
+              artistName = run.text.trim();
+            }
+          }
+
+          seen.add(browseId);
+          results.push({
+            id: browseId,
+            title,
+            artistName,
+            thumbnailUrl: thumb,
+            sourceType: 'youtube',
+            resultType: resType,
+            name: isArtist ? title : undefined,
+          } as any);
+          if (results.length >= count) break;
+          continue;
+        }
+
+        // Generic: recurse into object values
+        queue.push(...Object.values(cur).filter(v => v && typeof v === 'object').reverse());
+      }
+
+      return { results, continuation: nextContinuation };
+    } catch (err) {
+      console.error('[searchWithType] InnerTube fallback error:', err);
+      // Last resort: basic song search
+      const songs = await this.search(query, count);
+      return { results: songs as any[] };
+    }
+  }
+
+
+  async getArtistDetails(id: string): Promise<Artist | null> {
+    if (YouTubeExtractionService.isTauri()) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        return await invoke('get_artist_details_cmd', { artistId: id });
+      } catch (error) {
+        console.error('getArtistDetails Error:', error);
+      }
+    }
+    // Android / Web — InnerTube browse
+    try {
+      const ctx = { client: { clientName: 'WEB_REMIX', clientVersion: '1.20241028.01.00', hl: 'es', gl: 'US' } };
+      const res = await fetch('https://music.youtube.com/youtubei/v1/browse', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ context: ctx, browseId: id }),
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+
+      // Header
+      const header = data?.header?.musicImmersiveHeaderRenderer ?? data?.header?.musicVisualHeaderRenderer ?? null;
+      const name: string = header?.title?.runs?.[0]?.text ?? '';
+      const thumbs: any[] = header?.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails
+        ?? header?.foregroundThumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails ?? [];
+      const thumbnailUrl: string = thumbs[thumbs.length - 1]?.url ?? '';
+
+      // Biography
+      let biography: string | undefined;
+      const descShelf = data?.sections?.find?.((s: any) => s?.musicDescriptionShelfRenderer)?.musicDescriptionShelfRenderer;
+      if (descShelf?.description?.runs?.[0]?.text) biography = descShelf.description.runs[0].text;
+
+      // Sections (topSongs, albums, singles, playlists)
+      const topSongs: any[] = [];
+      const albums: any[] = [];
+      const singles: any[] = [];
+      const playlists: any[] = [];
+
+      const sections: any[] = data?.contents?.singleColumnBrowseResultsRenderer?.tabs?.[0]?.tabRenderer?.content?.sectionListRenderer?.contents ?? [];
+      for (const section of sections) {
+        const shelf = section?.musicShelfRenderer ?? section?.musicCarouselShelfRenderer;
+        if (!shelf) continue;
+        const headerText = (shelf?.header?.musicCarouselShelfBasicHeaderRenderer?.title?.runs?.[0]?.text ?? '').toLowerCase();
+        const isSongs = !!section?.musicShelfRenderer;
+        const isAlbum = headerText.includes('álbum') || headerText.includes('album');
+        const isSingle = headerText.includes('single') || headerText.includes('ep');
+        const isPlaylist = headerText.includes('lista') || headerText.includes('playlist');
+
+        for (const item of shelf?.contents ?? []) {
+          const li = item?.musicTwoRowItemRenderer ?? item?.musicResponsiveListItemRenderer;
+          if (!li) continue;
+          const itemTitle = li?.title?.runs?.[0]?.text ?? li?.flexColumns?.[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text ?? '';
+          const browseId = li?.navigationEndpoint?.browseEndpoint?.browseId ?? li?.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint?.watchPlaylistEndpoint?.playlistId ?? '';
+          const videoId = li?.navigationEndpoint?.watchEndpoint?.videoId ?? li?.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint?.watchEndpoint?.videoId ?? '';
+          const thumbArr: any[] = li?.thumbnailRenderer?.musicThumbnailRenderer?.thumbnail?.thumbnails ?? li?.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails ?? [];
+          const itemThumb = thumbArr[thumbArr.length - 1]?.url ?? '';
+
+          if (isSongs && videoId) {
+            topSongs.push({ id: videoId, title: itemTitle, artistName: name, thumbnailUrl: itemThumb || `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`, sourceType: 'youtube', resultType: 'song' });
+          } else if (browseId) {
+            const entry = { id: browseId, title: itemTitle, artistName: name, thumbnailUrl: itemThumb, sourceType: 'youtube', resultType: isPlaylist ? 'playlist' : isAlbum ? 'album' : isSingle ? 'album' : 'album' };
+            if (isPlaylist) playlists.push(entry);
+            else if (isSingle) singles.push(entry);
+            else albums.push(entry);
+          }
+        }
+      }
+
+      if (!name) return null;
+      return { id, name, thumbnailUrl, biography, topSongs, albums, singles, playlists } as any;
+    } catch (e) {
+      console.error('[getArtistDetails] InnerTube error:', e);
+      return null;
+    }
+  }
+
+  async getAlbumDetails(id: string): Promise<Album | null> {
+    if (YouTubeExtractionService.isTauri()) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        return await invoke('get_album_details_cmd', { albumId: id });
+      } catch (error) {
+        console.error('getAlbumDetails Error:', error);
+      }
+    }
+    // Android / Web — InnerTube browse
+    try {
+      const ctx = { client: { clientName: 'WEB_REMIX', clientVersion: '1.20241028.01.00', hl: 'es', gl: 'US' } };
+      const res = await fetch('https://music.youtube.com/youtubei/v1/browse', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ context: ctx, browseId: id }),
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+
+      // Header
+      const hdr = data?.contents?.twoColumnBrowseResultsRenderer?.tabs?.[0]
+        ?.tabRenderer?.content?.sectionListRenderer?.contents?.[0]?.musicResponsiveHeaderRenderer;
+      const title: string = hdr?.title?.runs?.[0]?.text ?? data?.microformat?.microformatDataRenderer?.title?.split(' - ')?.[0] ?? 'Unknown';
+      let artist = 'Unknown Artist';
+      for (const run of hdr?.straplineTextOne?.runs ?? []) {
+        if (run.text && run.text.trim() !== '•') { artist = run.text.trim(); break; }
+      }
+      if (artist === 'Unknown Artist') {
+        artist = data?.microformat?.microformatDataRenderer?.pageOwnerDetails?.name ?? artist;
+      }
+      const thumbArr: any[] = hdr?.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails
+        ?? data?.background?.musicThumbnailRenderer?.thumbnail?.thumbnails ?? [];
+      const thumbnailUrl: string = thumbArr[thumbArr.length - 1]?.url ?? '';
+
+      // Songs — traverse secondaryContents
+      const songs: any[] = [];
+      const sec = data?.contents?.twoColumnBrowseResultsRenderer?.secondaryContents;
+      const queue: any[] = [sec];
+      while (queue.length > 0) {
+        const cur = queue.pop();
+        if (!cur || typeof cur !== 'object') continue;
+        if (Array.isArray(cur)) { queue.push(...[...cur].reverse()); continue; }
+        if (cur.musicResponsiveListItemRenderer) {
+          const r = cur.musicResponsiveListItemRenderer;
+          const sTitle = r.flexColumns?.[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text ?? '';
+          const videoId = r.playlistItemData?.videoId ?? '';
+          if (videoId && sTitle) {
+            let dText: string | undefined;
+            for (const col of r.fixedColumns ?? []) {
+              for (const run of col?.musicResponsiveListItemFixedColumnRenderer?.text?.runs ?? []) {
+                if (run.text?.includes(':') && /^[\d:]+$/.test(run.text)) { dText = run.text; break; }
+              }
+            }
+            songs.push({ id: videoId, title: sTitle, artistName: artist, thumbnailUrl: thumbnailUrl || `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`, sourceType: 'youtube', resultType: 'song', durationText: dText });
+          }
+        } else {
+          queue.push(...Object.values(cur).filter(v => v && typeof v === 'object').reverse());
+        }
+      }
+
+      return { id, title, artistName: artist, thumbnailUrl, songs } as any;
+    } catch (e) {
+      console.error('[getAlbumDetails] InnerTube error:', e);
+      return null;
+    }
   }
 }
 

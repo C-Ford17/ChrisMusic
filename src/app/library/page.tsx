@@ -11,19 +11,23 @@ import { type Song } from '@/core/types/music';
 import { LibraryService } from '@/features/library/services/libraryService';
 import { MarqueeText } from '@/shared/components/MarqueeText';
 import { YouTubeExtractionService } from '@/features/player/services/youtubeExtractionService';
+import { useRouter } from 'next/navigation';
 
 export default function LibraryPage() {
-  const [activeTab, setActiveTab] = useState<'playlists' | 'favorites' | 'history' | 'offline'>('playlists');
+  const [activeTab, setActiveTab] = useState<'playlists' | 'favorites' | 'history' | 'offline' | 'artists' | 'albums'>('playlists');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   
   const { playSongInQueue, toggleDownload, downloadMultiple } = usePlayerStore();
+  const router = useRouter();
 
   const favorites = useLiveQuery(() => db.favorites.orderBy('addedAt').reverse().toArray(), []) || [];
   const history = useLiveQuery(() => db.history.orderBy('playedAt').reverse().toArray(), []) || [];
   const playlists = useLiveQuery(() => db.playlists.orderBy('createdAt').reverse().toArray(), []) || [];
   const offlineSongs = useLiveQuery(() => db.offlineSongs.orderBy('downloadedAt').reverse().toArray(), []) || [];
+  const followedArtists = useLiveQuery(() => db.followedArtists.orderBy('followedAt').reverse().toArray(), []) || [];
+  const savedAlbums = useLiveQuery(() => db.savedAlbums.orderBy('savedAt').reverse().toArray(), []) || [];
 
   const filteredPlaylists = playlists.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()));
   const filteredFavorites = favorites.filter(f => 
@@ -38,6 +42,8 @@ export default function LibraryPage() {
     o.song.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
     o.song.artistName.toLowerCase().includes(searchQuery.toLowerCase())
   );
+  const filteredArtists = followedArtists.filter(a => a.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredAlbums = savedAlbums.filter(a => a.title.toLowerCase().includes(searchQuery.toLowerCase()) || a.artistName.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
     <main className="flex-1 p-6 pb-40 min-h-screen pt-safe bg-white dark:bg-[#0A0A0A] transition-colors duration-500">
@@ -92,6 +98,20 @@ export default function LibraryPage() {
         >
           Descargas
           {activeTab === 'offline' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-[var(--accent-primary)] rounded-t-full shadow-[0_0_10px_var(--accent-primary)]/50" />}
+        </button>
+        <button 
+          className={`pb-4 px-6 text-[10px] whitespace-nowrap font-black uppercase tracking-[0.2em] transition-all relative ${activeTab === 'artists' ? 'text-[var(--accent-primary)]' : 'text-black/30 dark:text-gray-400 hover:text-black dark:hover:text-white'}`}
+          onClick={() => setActiveTab('artists')}
+        >
+          Artistas
+          {activeTab === 'artists' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-[var(--accent-primary)] rounded-t-full shadow-[0_0_10px_var(--accent-primary)]/50" />}
+        </button>
+        <button 
+          className={`pb-4 px-6 text-[10px] whitespace-nowrap font-black uppercase tracking-[0.2em] transition-all relative ${activeTab === 'albums' ? 'text-[var(--accent-primary)]' : 'text-black/30 dark:text-gray-400 hover:text-black dark:hover:text-white'}`}
+          onClick={() => setActiveTab('albums')}
+        >
+          Álbumes
+          {activeTab === 'albums' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-[var(--accent-primary)] rounded-t-full shadow-[0_0_10px_var(--accent-primary)]/50" />}
         </button>
         <button 
           className={`pb-4 px-6 text-[10px] whitespace-nowrap font-black uppercase tracking-[0.2em] transition-all relative ${activeTab === 'history' ? 'text-[var(--accent-primary)]' : 'text-black/30 dark:text-gray-400 hover:text-black dark:hover:text-white'}`}
@@ -232,6 +252,55 @@ export default function LibraryPage() {
                 >
                   <Trash2 size={18} />
                 </button>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {activeTab === 'artists' && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+          {followedArtists.length === 0 ? (
+             <div className="col-span-full flex flex-col items-center justify-center text-center py-32 opacity-20">
+               <Music size={80} className="mb-6" />
+               <p className="mb-2 text-2xl font-black tracking-tighter text-black dark:text-white">Sin artistas seguidos</p>
+             </div>
+          ) : (
+            filteredArtists.map(artist => (
+              <div 
+                key={artist.id} 
+                className="group cursor-pointer text-center"
+                onClick={() => router.push(`/artist?id=${artist.id}`)}
+              >
+                <div className="relative aspect-square rounded-full overflow-hidden shadow-lg mb-4 ring-2 ring-black/5 dark:ring-white/5 group-hover:scale-105 transition-transform duration-500">
+                  <Image src={YouTubeExtractionService.normalizeUrl(artist.thumbnailUrl)} alt={artist.name} fill className="object-cover" />
+                </div>
+                <h3 className="font-bold text-sm text-black dark:text-white line-clamp-1">{artist.name}</h3>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {activeTab === 'albums' && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+          {savedAlbums.length === 0 ? (
+             <div className="col-span-full flex flex-col items-center justify-center text-center py-32 opacity-20">
+               <Music size={80} className="mb-6" />
+               <p className="mb-2 text-2xl font-black tracking-tighter text-black dark:text-white">Sin álbumes guardados</p>
+             </div>
+          ) : (
+            filteredAlbums.map(album => (
+              <div 
+                key={album.id} 
+                className="group cursor-pointer"
+                onClick={() => router.push(`/album?id=${album.id}`)}
+              >
+                <div className="relative aspect-square rounded-[32px] overflow-hidden shadow-lg mb-4 ring-1 ring-black/5 dark:ring-white/5 group-hover:scale-105 transition-transform duration-500">
+                  <Image src={YouTubeExtractionService.normalizeUrl(album.thumbnailUrl)} alt={album.title} fill className="object-cover" />
+                </div>
+                <h3 className="font-bold text-sm text-black dark:text-white line-clamp-1">{album.title}</h3>
+                <p className="text-[10px] text-gray-500 font-medium uppercase tracking-widest mt-1 truncate">{album.artistName}</p>
               </div>
             ))
           )}

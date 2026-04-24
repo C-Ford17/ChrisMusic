@@ -66,6 +66,21 @@ export interface CachedSong {
   cachedAt: number;
 }
 
+export interface FollowedArtist {
+  id: string; // Artist ID
+  name: string;
+  thumbnailUrl: string;
+  followedAt: number;
+}
+
+export interface SavedAlbum {
+  id: string; // Album ID
+  title: string;
+  artistName: string;
+  thumbnailUrl: string;
+  savedAt: number;
+}
+
 export class ChrisMusicDB extends Dexie {
   favorites!: EntityTable<Favorite, 'id'>;
   history!: EntityTable<PlayHistory, 'id'>;
@@ -75,6 +90,8 @@ export class ChrisMusicDB extends Dexie {
   searchHistory!: EntityTable<SearchHistory, 'query'>;
   offlineSongs!: EntityTable<OfflineSong, 'id'>;
   cachedSongs!: EntityTable<CachedSong, 'id'>;
+  followedArtists!: EntityTable<FollowedArtist, 'id'>;
+  savedAlbums!: EntityTable<SavedAlbum, 'id'>;
 
   constructor() {
     super('ChrisMusicDB');
@@ -90,7 +107,8 @@ export class ChrisMusicDB extends Dexie {
     // Version 2-6 were incremental but incomplete (Dexie requires full schema in each version)
     // Consolidating everything in Version 7
     // Version 8: Added thumbnail storage
-    this.version(8).stores({
+    // Version 9: Added FollowedArtists and SavedAlbums
+    this.version(9).stores({
       favorites: 'id, addedAt',
       history: '++id, playedAt',
       playlists: 'id, createdAt',
@@ -98,9 +116,12 @@ export class ChrisMusicDB extends Dexie {
       lyrics: 'id, updatedAt',
       searchHistory: 'query, timestamp',
       offlineSongs: 'id, downloadedAt',
-      cachedSongs: 'id, cachedAt'
+      cachedSongs: 'id, cachedAt',
+      followedArtists: 'id, followedAt',
+      savedAlbums: 'id, savedAt'
     });
   }
+
 }
 
 // Export a singleton instance of the database

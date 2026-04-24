@@ -18,3 +18,13 @@ commands.allow = ["get_streaming_url"]
 identifier = "allow-test-ytdlp"
 description = "Allow testing yt-dlp"
 commands.allow = ["test_ytdlp"]
+
+[[permission]]
+identifier = "allow-get-artist-details-cmd"
+description = "Allow getting artist details"
+commands.allow = ["get_artist_details_cmd"]
+
+[[permission]]
+identifier = "allow-get-album-details-cmd"
+description = "Allow getting album details"
+commands.allow = ["get_album_details_cmd"]
