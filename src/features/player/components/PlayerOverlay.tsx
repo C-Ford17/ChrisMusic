@@ -37,7 +37,8 @@ export function PlayerOverlay() {
     toggleDownload, downloadingSongs,
     isBuffering,
     audioSource,
-    syncState
+    syncState,
+    isSearchingLyrics
   } = usePlayerStore();
 
   const { isDebugMode, isShutdownTimerActive, shutdownTimerEndsAt, startShutdownTimer, cancelShutdownTimer } = useSettingsStore();
@@ -437,9 +438,15 @@ export function PlayerOverlay() {
                 </div>
 
                 {/* Panel de Controles Multifila Estilo RiMusic */}
-                <motion.div 
-                  className={`w-full max-w-2xl mx-auto flex flex-col px-8 mt-auto pb-safe transition-all duration-500 ${showLyrics ? 'gap-4 pb-4 sm:pb-6' : 'gap-6 sm:gap-8 pb-10 sm:pb-16'}`}
-                >
+                <AnimatePresence>
+                  {!isSearchingLyrics && (
+                    <motion.div 
+                      key="player-controls"
+                      initial={{ opacity: 1, y: 0 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 100 }}
+                      className={`w-full max-w-2xl mx-auto flex flex-col px-8 mt-auto pb-safe transition-all duration-500 ${showLyrics ? 'gap-4 pb-4 sm:pb-6' : 'gap-6 sm:gap-8 pb-10 sm:pb-16'}`}
+                    >
                   
                   {/* Fila 1: Metadatos y Acciones Básicas */}
                   <div className="flex items-end justify-between gap-4">
@@ -514,7 +521,9 @@ export function PlayerOverlay() {
                        {repeatMode === 'one' ? <Repeat1 size={22} /> : <Repeat size={22} />}
                      </button>
                   </div>
-                </motion.div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
                 <AnimatePresence>
                   {showQueue && (

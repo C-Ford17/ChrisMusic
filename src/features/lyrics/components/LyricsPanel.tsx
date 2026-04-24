@@ -7,10 +7,9 @@ import { Search, Music, Clock as ClockIcon, X, Check } from 'lucide-react';
 import { lyricsService, type LyricsData } from '@/features/lyrics/services/lrclibService';
 
 export function LyricsPanel() {
-  const { lyrics, progress, isLyricsLoading, currentSong, updateLyrics, seekTo } = usePlayerStore();
+  const { lyrics, progress, isLyricsLoading, currentSong, updateLyrics, seekTo, isSearchingLyrics: isSearching, setIsSearchingLyrics: setIsSearching } = usePlayerStore();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [activeLineIndex, setActiveLineIndex] = useState(-1);
-  const [isSearching, setIsSearching] = useState(false);
   const [query, setQuery] = useState({ 
     title: currentSong?.title || '', 
     artist: currentSong?.artistName || '' 

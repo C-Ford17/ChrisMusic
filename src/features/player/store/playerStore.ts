@@ -59,6 +59,7 @@ interface PlayerState {
   fetchLyrics: (song: Song) => Promise<void>;
   updateLyrics: (data: LyricsData) => Promise<void>;
   setShowLyrics: (show: boolean) => void;
+  setIsSearchingLyrics: (isSearching: boolean) => void;
   setIsBuffering: (isBuffering: boolean) => void;
   prefetchNext: () => Promise<void>;
   setAudioSource: (source: 'youtube' | 'cache' | 'download' | null) => void;
@@ -517,8 +518,9 @@ export const usePlayerStore = create<PlayerState>()(
         }
       },
 
-
-
+      showLyrics: false,
+      isSearchingLyrics: false,
+      setIsSearchingLyrics: (isSearching: boolean) => set({ isSearchingLyrics: isSearching }),
       setShowLyrics: (show: boolean) => set({ showLyrics: show }),
       setIsBuffering: (isBuffering: boolean) => set({ isBuffering }),
       

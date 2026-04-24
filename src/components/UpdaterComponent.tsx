@@ -43,7 +43,7 @@ interface UpdateInfo {
 }
 
 // Esta versión debe coincidir con la de package.json cada vez que hagas un build nativo
-const APP_CODE_VERSION = "1.0.12";
+const APP_CODE_VERSION = "1.0.13";
 
 export function UpdaterComponent() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
@@ -188,14 +188,8 @@ export function UpdaterComponent() {
 
           setStatusMessage("Aplicando cambios...");
           
-          // Activar Splash nativo solo brevemente para el reinicio real, 
-          // pero el overlay de React ya habrá preparado al usuario.
-          if (Capacitor.isNativePlatform()) {
-             await SplashScreen.show({
-              showDuration: 2000,
-              autoHide: true
-             });
-          }
+          // No mostramos el Splash nativo para evitar el icono grande al final
+          // La app simplemente se reiniciará con los nuevos activos web
           
           await CapacitorUpdater.set({ id: bundle.id });
         } finally {
