@@ -20,7 +20,10 @@ function PlaylistContent() {
   const { playSongInQueue, downloadMultiple } = usePlayerStore();
 
   const playlist = useLiveQuery(() => db.playlists.get(playlistId), [playlistId]);
-  const entries = useLiveQuery(() => db.playlistEntries.where('playlistId').equals(playlistId).sortBy('orderIndex'), [playlistId]) || [];
+  const entries = useLiveQuery(async () => {
+    const all = await db.playlistEntries.where('playlistId').equals(playlistId).toArray();
+    return all.sort((a, b) => (a.orderIndex ?? a.addedAt) - (b.orderIndex ?? b.addedAt));
+  }, [playlistId]) || [];
 
   const handleReorder = async (newOrder: any[]) => {
     await LibraryService.updatePlaylistOrder(playlistId, newOrder.map(e => e.id));

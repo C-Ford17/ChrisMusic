@@ -24,10 +24,16 @@ export default function LibraryPage() {
   const { playSongInQueue, toggleDownload, downloadMultiple } = usePlayerStore();
   const router = useRouter();
 
-  const favorites = useLiveQuery(() => db.favorites.orderBy('orderIndex').toArray(), []) || [];
+  const favorites = useLiveQuery(async () => {
+    const all = await db.favorites.toArray();
+    return all.sort((a, b) => (a.orderIndex ?? a.addedAt) - (b.orderIndex ?? b.addedAt));
+  }, []) || [];
   const history = useLiveQuery(() => db.history.orderBy('playedAt').reverse().toArray(), []) || [];
   const playlists = useLiveQuery(() => db.playlists.orderBy('createdAt').reverse().toArray(), []) || [];
-  const offlineSongs = useLiveQuery(() => db.offlineSongs.orderBy('orderIndex').toArray(), []) || [];
+  const offlineSongs = useLiveQuery(async () => {
+    const all = await db.offlineSongs.toArray();
+    return all.sort((a, b) => (a.orderIndex ?? a.downloadedAt) - (b.orderIndex ?? b.downloadedAt));
+  }, []) || [];
   const followedArtists = useLiveQuery(() => db.followedArtists.orderBy('followedAt').reverse().toArray(), []) || [];
   const savedAlbums = useLiveQuery(() => db.savedAlbums.orderBy('savedAt').reverse().toArray(), []) || [];
 

@@ -48,7 +48,9 @@ function SortableSongItem({ id, song, isEditing, onPlay, onRemove }: SortableSon
     transform: CSS.Transform.toString(transform),
     transition,
     zIndex: isDragging ? 50 : 'auto',
-    opacity: isDragging ? 0.5 : 1,
+    opacity: isDragging ? 0.8 : 1,
+    scale: isDragging ? '1.02' : '1',
+    boxShadow: isDragging ? '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)' : 'none',
   };
 
   return (
@@ -63,9 +65,10 @@ function SortableSongItem({ id, song, isEditing, onPlay, onRemove }: SortableSon
           <div 
             {...attributes} 
             {...listeners}
-            className="p-2 mr-2 text-black/20 dark:text-white/20 cursor-grab active:cursor-grabbing hover:text-[var(--accent-primary)] transition-colors"
+            style={{ touchAction: 'none' }}
+            className="p-3 -m-1 mr-1 text-black/30 dark:text-white/30 cursor-grab active:cursor-grabbing hover:text-[var(--accent-primary)] transition-colors"
           >
-            <GripVertical size={20} />
+            <GripVertical size={24} strokeWidth={2.5} />
           </div>
         )}
         <div className="relative w-14 h-14 mr-4 shrink-0 bg-gray-200 dark:bg-black rounded-2xl overflow-hidden shadow-sm">
@@ -120,13 +123,12 @@ export function SortableSongList({ songs, onReorder, onPlay, onRemove, type }: S
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8, // Avoid accidental drags when clicking
+        distance: 5, // Sensibilidad equilibrada
       },
     }),
     useSensor(TouchSensor, {
         activationConstraint: {
-          delay: 200, // Long press for mobile to start dragging
-          tolerance: 5,
+          distance: 5, // Instantáneo al mover 5px, sin delay
         },
     }),
     useSensor(KeyboardSensor, {
@@ -137,10 +139,19 @@ export function SortableSongList({ songs, onReorder, onPlay, onRemove, type }: S
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (over && active.id !== over.id) {
-      const oldIndex = songs.findIndex((s) => (s.id || s.playlistId + s.song.id) === active.id);
-      const newIndex = songs.findIndex((s) => (s.id || s.playlistId + s.song.id) === over.id);
-      const newOrder = arrayMove(songs, oldIndex, newIndex);
-      onReorder(newOrder);
+      const oldIndex = songs.findIndex((s) => {
+        const sid = s.id?.toString() || (s.playlistId + s.song.id);
+        return sid === active.id;
+      });
+      const newIndex = songs.findIndex((s) => {
+        const sid = s.id?.toString() || (s.playlistId + s.song.id);
+        return sid === over.id;
+      });
+      
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const newOrder = arrayMove(songs, oldIndex, newIndex);
+        onReorder(newOrder);
+      }
     }
   };
 
@@ -203,20 +214,23 @@ export function SortableSongList({ songs, onReorder, onPlay, onRemove, type }: S
         modifiers={[restrictToVerticalAxis]}
       >
         <SortableContext 
-          items={songs.map(s => s.id || (s.playlistId + s.song.id))} 
+          items={songs.map(s => s.id?.toString() || (s.playlistId + s.song.id))} 
           strategy={verticalListSortingStrategy}
         >
           <div className="flex flex-col gap-3">
-            {songs.map((item) => (
-              <SortableSongItem 
-                key={item.id || (item.playlistId + item.song.id)}
-                id={item.id || (item.playlistId + item.song.id)}
-                song={item.song}
-                isEditing={isEditing}
-                onPlay={(s) => onPlay(s, songs.map(i => i.song))}
-                onRemove={onRemove}
-              />
-            ))}
+            {songs.map((item) => {
+              const itemId = item.id?.toString() || (item.playlistId + item.song.id);
+              return (
+                <SortableSongItem 
+                  key={itemId}
+                  id={itemId}
+                  song={item.song}
+                  isEditing={isEditing}
+                  onPlay={(s) => onPlay(s, songs.map(i => i.song))}
+                  onRemove={onRemove}
+                />
+              );
+            })}
           </div>
         </SortableContext>
       </DndContext>
