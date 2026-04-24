@@ -12,6 +12,7 @@ export interface Song {
   rawInfo?: string;
   albumId?: string;
   artistId?: string;
+  resultType?: string;
 }
 
 export interface Artist {
@@ -22,6 +23,7 @@ export interface Artist {
   description?: string;
   topSongs?: Song[];
   albums?: Album[];
+  resultType?: string;
 }
 
 export interface Album {
@@ -34,6 +36,7 @@ export interface Album {
   trackCount?: number;
   duration?: string;
   songs?: Song[];
+  resultType?: string;
 }
 
 export type SearchResult = Song | Artist | Album;

@@ -275,31 +275,31 @@ export class YouTubeExtractionService {
 
   async search(query: string, count: number = 15): Promise<Song[]> {
     await this.ensureInitialized();
-    const { results } = await this.searchWithType(query, 'song', count);
-    return results.map(r => ({
-      id: r.id,
-      title: r.title,
-      artistName: r.artistName,
-      thumbnailUrl: r.thumbnailUrl,
-      duration: 0,
-      sourceType: 'youtube'
-    }));
-  }
-
-    // Fallback for JS web
-    if (this.yt) {
-      const results = await this.yt.search(query);
-      return results.videos.map((v: any) => ({
-        id: v.id,
-        title: v.title.text,
-        artistName: v.author.name,
-        thumbnailUrl: v.thumbnails[0].url,
-        duration: v.duration.seconds,
+    try {
+      const { results } = await this.searchWithType(query, 'song', count);
+      return results.map(r => ({
+        id: r.id,
+        title: (r as any).title || (r as any).name || '',
+        artistName: (r as any).artistName || '',
+        thumbnailUrl: r.thumbnailUrl,
+        duration: 0,
         sourceType: 'youtube'
       }));
+    } catch (err) {
+      console.error('[YouTubeExtractionService] SearchWithType failed, using fallback:', err);
+      if (this.yt) {
+        const results = await this.yt.search(query);
+        return results.videos.map((v: any) => ({
+          id: v.id,
+          title: v.title.text,
+          artistName: v.author.name,
+          thumbnailUrl: v.thumbnails[0].url,
+          duration: v.duration.seconds,
+          sourceType: 'youtube'
+        }));
+      }
+      return [];
     }
-
-    return [];
   }
 
   /**
@@ -569,9 +569,7 @@ export class YouTubeExtractionService {
       return { results, continuation: nextContinuation };
     } catch (err) {
       console.error('[searchWithType] InnerTube fallback error:', err);
-      // Last resort: basic song search
-      const songs = await this.search(query, count);
-      return { results: songs as any[] };
+      return { results: [] };
     }
   }
 
