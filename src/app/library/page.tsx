@@ -9,7 +9,9 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { type Song } from '@/core/types/music';
 import { LibraryService } from '@/features/library/services/libraryService';
+import { offlineService } from '@/features/library/services/offlineService';
 import { MarqueeText } from '@/shared/components/MarqueeText';
+import { SortableSongList } from '@/shared/components/SortableSongList';
 import { YouTubeExtractionService } from '@/features/player/services/youtubeExtractionService';
 import { useRouter } from 'next/navigation';
 
@@ -22,12 +24,20 @@ export default function LibraryPage() {
   const { playSongInQueue, toggleDownload, downloadMultiple } = usePlayerStore();
   const router = useRouter();
 
-  const favorites = useLiveQuery(() => db.favorites.orderBy('addedAt').reverse().toArray(), []) || [];
+  const favorites = useLiveQuery(() => db.favorites.orderBy('orderIndex').toArray(), []) || [];
   const history = useLiveQuery(() => db.history.orderBy('playedAt').reverse().toArray(), []) || [];
   const playlists = useLiveQuery(() => db.playlists.orderBy('createdAt').reverse().toArray(), []) || [];
-  const offlineSongs = useLiveQuery(() => db.offlineSongs.orderBy('downloadedAt').reverse().toArray(), []) || [];
+  const offlineSongs = useLiveQuery(() => db.offlineSongs.orderBy('orderIndex').toArray(), []) || [];
   const followedArtists = useLiveQuery(() => db.followedArtists.orderBy('followedAt').reverse().toArray(), []) || [];
   const savedAlbums = useLiveQuery(() => db.savedAlbums.orderBy('savedAt').reverse().toArray(), []) || [];
+
+  const handleReorderFavorites = async (newOrder: any[]) => {
+    await LibraryService.updateFavoritesOrder(newOrder.map(f => f.id));
+  };
+
+  const handleReorderOffline = async (newOrder: any[]) => {
+    await offlineService.updateOfflineOrder(newOrder.map(o => o.id));
+  };
 
   const filteredPlaylists = playlists.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()));
   const filteredFavorites = favorites.filter(f => 
@@ -179,37 +189,13 @@ export default function LibraryPage() {
               <p className="text-sm font-medium text-black/50 dark:text-white/50">Pulsa el corazón en cualquier canción.</p>
             </div>
           ) : (
-            filteredFavorites.map((fav) => (
-              <div 
-                key={fav.id} 
-                className="group flex items-center justify-between p-4 rounded-2xl bg-black/[0.02] dark:bg-white/[0.02] hover:bg-white dark:hover:bg-white/5 border border-transparent hover:border-black/5 dark:hover:border-white/5 shadow-sm hover:shadow-xl transition-all cursor-pointer" 
-                onClick={() => playSongInQueue(fav.song as Song, filteredFavorites.map(f => f.song as Song))}
-              >
-                <div className="flex items-center min-w-0 pr-4">
-                  <div className="relative w-12 h-12 mr-4 shrink-0 bg-black rounded overflow-hidden shadow">
-                    <Image src={YouTubeExtractionService.normalizeUrl(fav.song.thumbnailUrl, fav.song.id)} alt={fav.song.title} fill sizes="48px" className="object-cover" />
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                      <Play size={20} className="text-white" fill="currentColor" />
-                    </div>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-black dark:text-white font-bold text-sm overflow-hidden">
-                      <MarqueeText text={fav.song.title} />
-                    </h4>
-                    <p className="text-black/40 dark:text-gray-400 text-xs font-medium truncate">{fav.song.artistName}</p>
-                  </div>
-                </div>
-                <button 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    LibraryService.removeFavorite(fav.id);
-                  }}
-                  className="p-3 text-black/20 dark:text-white/20 hover:text-red-500 hover:bg-red-500/10 rounded-full transition-all"
-                >
-                  <Trash2 size={18} />
-                </button>
-              </div>
-            ))
+            <SortableSongList 
+              songs={filteredFavorites}
+              onReorder={handleReorderFavorites}
+              onPlay={playSongInQueue}
+              onRemove={LibraryService.removeFavorite}
+              type="favorites"
+            />
           )}
         </div>
       )}
@@ -223,37 +209,13 @@ export default function LibraryPage() {
               <p className="text-sm font-medium text-black/50 dark:text-white/50">Busca canciones y descárgalas para usarlas offline.</p>
             </div>
           ) : (
-            filteredOffline.map((item) => (
-              <div 
-                key={item.id} 
-                className="group flex items-center justify-between p-4 rounded-3xl bg-black/[0.02] dark:bg-white/[0.02] hover:bg-white dark:hover:bg-white/5 border border-transparent hover:border-black/5 dark:hover:border-white/5 shadow-sm hover:shadow-xl transition-all cursor-pointer" 
-                onClick={() => playSongInQueue(item.song as Song, filteredOffline.map(o => o.song as Song))}
-              >
-                <div className="flex items-center min-w-0 pr-4">
-                  <div className="relative w-14 h-14 mr-4 shrink-0 bg-gray-200 dark:bg-black rounded-2xl overflow-hidden shadow-sm">
-                    <Image src={YouTubeExtractionService.normalizeUrl(item.song.thumbnailUrl, item.song.id)} alt={item.song.title} fill sizes="56px" className="object-cover" />
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                      <Play size={24} className="text-white" fill="currentColor" />
-                    </div>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-black dark:text-white font-bold text-base overflow-hidden tracking-tight">
-                      <MarqueeText text={item.song.title} />
-                    </h4>
-                    <p className="text-black/40 dark:text-gray-400 text-xs font-medium truncate mt-0.5 uppercase tracking-wider">{item.song.artistName}</p>
-                  </div>
-                </div>
-                <button 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleDownload(item.song as Song);
-                  }}
-                  className="p-3 text-black/20 dark:text-white/20 hover:text-red-500 hover:bg-red-500/10 rounded-full transition-all"
-                >
-                  <Trash2 size={18} />
-                </button>
-              </div>
-            ))
+            <SortableSongList 
+              songs={filteredOffline}
+              onReorder={handleReorderOffline}
+              onPlay={playSongInQueue}
+              onRemove={(id) => toggleDownload(offlineSongs.find(o => o.id === id)?.song as Song)}
+              type="offline"
+            />
           )}
         </div>
       )}

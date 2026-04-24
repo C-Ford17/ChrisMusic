@@ -3,13 +3,14 @@
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/core/db/db';
-import { ChevronLeft, Play, Trash2, Download } from 'lucide-react';
+import { ChevronLeft, Play, Trash2, Download, Music } from 'lucide-react';
 import Image from 'next/image';
 import { usePlayerStore } from '@/features/player/store/playerStore';
 import { LibraryService } from '@/features/library/services/libraryService';
 import { type Song } from '@/core/types/music';
 import { Suspense } from 'react';
-import { YouTubeExtractionService } from '@/features/player/services/youtubeExtractionService';
+import { MarqueeText } from '@/shared/components/MarqueeText';
+import { SortableSongList } from '@/shared/components/SortableSongList';
 
 function PlaylistContent() {
   const searchParams = useSearchParams();
@@ -19,7 +20,11 @@ function PlaylistContent() {
   const { playSongInQueue, downloadMultiple } = usePlayerStore();
 
   const playlist = useLiveQuery(() => db.playlists.get(playlistId), [playlistId]);
-  const entries = useLiveQuery(() => db.playlistEntries.where('playlistId').equals(playlistId).sortBy('addedAt'), [playlistId]) || [];
+  const entries = useLiveQuery(() => db.playlistEntries.where('playlistId').equals(playlistId).sortBy('orderIndex'), [playlistId]) || [];
+
+  const handleReorder = async (newOrder: any[]) => {
+    await LibraryService.updatePlaylistOrder(playlistId, newOrder.map(e => e.id));
+  };
 
   if (!playlistId) {
     router.push('/library');
@@ -30,78 +35,58 @@ function PlaylistContent() {
   if (playlist === null) return <div className="p-4 flex-1 pb-32 text-center text-red-400">Playlist not found</div>;
 
   return (
-    <main className="flex-1 pb-32 min-h-screen flex flex-col pt-safe">
+    <main className="flex-1 pb-32 min-h-screen flex flex-col pt-safe bg-white dark:bg-[#0A0A0A] transition-colors duration-500">
       {/* Header */}
-      <div className="px-4 mb-6 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-           <button onClick={() => router.back()} className="p-2 -ml-2 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-colors">
-             <ChevronLeft size={28} />
+      <div className="px-6 mb-8 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+           <button onClick={() => router.back()} className="p-3 -ml-3 text-black/40 dark:text-white/40 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 rounded-2xl transition-all">
+             <ChevronLeft size={32} strokeWidth={2.5} />
            </button>
-           <h1 className="text-2xl font-bold truncate max-w-[200px] sm:max-w-md">{playlist.name}</h1>
+           <div>
+            <h1 className="text-3xl font-black text-black dark:text-white tracking-tighter leading-none">{playlist.name}</h1>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-black/30 dark:text-white/30 mt-2">Mezcla Personalizada</p>
+           </div>
         </div>
         <button 
           onClick={async () => {
-            if (confirm('Are you sure you want to delete this playlist?')) {
+            if (confirm('¿Estás seguro de que quieres eliminar esta mezcla?')) {
               await LibraryService.deletePlaylist(playlist.id);
               router.push('/library');
             }
           }}
-          className="p-2 text-red-500/70 hover:text-red-500 hover:bg-red-500/10 rounded-full transition-colors"
-          title="Delete Playlist"
+          className="p-3 text-red-500/40 hover:text-red-500 hover:bg-red-500/10 rounded-2xl transition-all"
+          title="Eliminar Mezcla"
         >
-          <Trash2 size={20} />
+          <Trash2 size={24} strokeWidth={2.5} />
         </button>
       </div>
 
       {/* Playlist Content */}
-      <div className="px-4 flex flex-col gap-2">
+      <div className="px-6 flex flex-col gap-2">
         {entries.length > 0 && (
-          <div className="flex justify-end mb-2">
+          <div className="flex justify-end mb-4">
             <button 
               onClick={() => downloadMultiple(entries.map(e => e.song as Song))}
-              className="flex items-center gap-2 px-4 py-2 bg-white/10 text-white hover:bg-[var(--accent-primary)] hover:text-white rounded-full text-xs font-bold uppercase tracking-wider transition-all"
+              className="flex items-center gap-2 px-6 py-3 bg-black/5 dark:bg-white/5 text-black dark:text-white hover:bg-[var(--accent-primary)] hover:text-white rounded-full text-[10px] font-black uppercase tracking-widest transition-all shadow-sm"
             >
               <Download size={16} /> Descargar Todas
             </button>
           </div>
         )}
         {entries.length === 0 ? (
-          <div className="flex flex-col items-center justify-center text-center py-20 opacity-50">
-            <p className="mb-2 text-lg">Playlist is empty</p>
-            <p className="text-sm">Find songs and add them to this playlist.</p>
+          <div className="flex flex-col items-center justify-center text-center py-32 opacity-20">
+            <Music size={80} className="mb-6" />
+            <p className="mb-2 text-2xl font-black tracking-tighter text-black dark:text-white">Esta mezcla está vacía</p>
+            <p className="text-sm font-medium">Busca canciones y añádelas aquí.</p>
           </div>
         ) : (
-          entries.map((entry) => (
-            <div 
-              key={entry.id} 
-              className="group flex items-center justify-between p-3 rounded-xl bg-black/20 hover:bg-white/10 transition-colors cursor-pointer" 
-              onClick={() => playSongInQueue(entry.song as Song, entries.map(e => e.song as Song))}
-            >
-              <div className="flex items-center min-w-0 pr-4">
-                <div className="relative w-12 h-12 mr-4 shrink-0 bg-black rounded overflow-hidden shadow">
-                  <Image src={YouTubeExtractionService.normalizeUrl(entry.song.thumbnailUrl, entry.song.id)} alt={entry.song.title} fill sizes="48px" className="object-cover" />
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                    <Play size={20} className="text-white" fill="currentColor" />
-                  </div>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h4 className="text-white font-medium text-sm truncate">{entry.song.title}</h4>
-                  <p className="text-gray-400 text-xs truncate">{entry.song.artistName}</p>
-                </div>
-              </div>
-              
-              <button 
-                  className="text-gray-500 hover:text-red-500 hover:bg-red-500/10 p-2 rounded-full transition-all"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    LibraryService.removeSongFromPlaylist(entry.id!);
-                  }}
-                  title="Remove from Playlist"
-                >
-                  <Trash2 size={18} />
-              </button>
-            </div>
-          ))
+          <SortableSongList 
+            songs={entries}
+            onReorder={handleReorder}
+            onPlay={playSongInQueue}
+            onRemove={(id) => LibraryService.removeSongFromPlaylist(Number(id))}
+            type="playlist"
+          />
         )}
       </div>
     </main>

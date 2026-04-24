@@ -41,6 +41,14 @@ export const LibraryService = {
     await db.favorites.delete(songId);
   },
 
+  async updateFavoritesOrder(songIds: string[]): Promise<void> {
+    await db.transaction('rw', db.favorites, async () => {
+      for (let i = 0; i < songIds.length; i++) {
+        await db.favorites.update(songIds[i], { orderIndex: i });
+      }
+    });
+  },
+
   // History (Saves play to IndexedDB)
   async recordPlay(song: Song): Promise<void> {
     try {
@@ -84,10 +92,22 @@ export const LibraryService = {
   },
 
   async addSongToPlaylist(playlistId: string, song: Song): Promise<void> {
+    const entries = await db.playlistEntries.where('playlistId').equals(playlistId).toArray();
+    const nextIndex = entries.length > 0 ? Math.max(...entries.map(e => e.orderIndex ?? 0)) + 1 : 0;
+
     await db.playlistEntries.add({
       playlistId,
       song: mapToLocalSong(song),
-      addedAt: Date.now()
+      addedAt: Date.now(),
+      orderIndex: nextIndex
+    });
+  },
+
+  async updatePlaylistOrder(playlistId: string, entryIds: number[]): Promise<void> {
+    await db.transaction('rw', db.playlistEntries, async () => {
+      for (let i = 0; i < entryIds.length; i++) {
+        await db.playlistEntries.update(entryIds[i], { orderIndex: i });
+      }
     });
   },
 

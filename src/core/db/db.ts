@@ -14,6 +14,7 @@ export interface Favorite {
   id: string; // Same as YouTube Video ID
   song: LocalSong;
   addedAt: number;
+  orderIndex?: number;
 }
 
 export interface PlayHistory {
@@ -33,6 +34,7 @@ export interface PlaylistEntry {
   playlistId: string; // ID referencing UserPlaylist
   song: LocalSong;
   addedAt: number;
+  orderIndex?: number;
 }
 
 export interface LyricsRecord {
@@ -54,6 +56,7 @@ export interface OfflineSong {
   thumbnailBlob?: Blob; // Image for offline display
   thumbnailFilePath?: string; // Image for native notification
   downloadedAt: number;
+  orderIndex?: number;
 }
 
 export interface CachedSong {
@@ -108,14 +111,15 @@ export class ChrisMusicDB extends Dexie {
     // Consolidating everything in Version 7
     // Version 8: Added thumbnail storage
     // Version 9: Added FollowedArtists and SavedAlbums
-    this.version(9).stores({
-      favorites: 'id, addedAt',
+    // Version 10: Added orderIndex for manual reordering
+    this.version(10).stores({
+      favorites: 'id, addedAt, orderIndex',
       history: '++id, playedAt',
       playlists: 'id, createdAt',
-      playlistEntries: '++id, playlistId, addedAt',
+      playlistEntries: '++id, playlistId, addedAt, orderIndex',
       lyrics: 'id, updatedAt',
       searchHistory: 'query, timestamp',
-      offlineSongs: 'id, downloadedAt',
+      offlineSongs: 'id, downloadedAt, orderIndex',
       cachedSongs: 'id, cachedAt',
       followedArtists: 'id, followedAt',
       savedAlbums: 'id, savedAt'

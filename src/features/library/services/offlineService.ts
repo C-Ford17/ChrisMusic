@@ -248,12 +248,16 @@ export class OfflineService {
         thumbBlob = thumb;
       }
 
+      const last = await db.offlineSongs.orderBy('orderIndex').last();
+      const nextIndex = (last?.orderIndex ?? 0) + 1;
+
       const offlineSongData: OfflineSong = {
         id: song.id,
         song: song,
         audioBlob,
         thumbnailBlob: thumbBlob,
-        downloadedAt: Date.now()
+        downloadedAt: Date.now(),
+        orderIndex: nextIndex
       };
 
       await db.offlineSongs.put(offlineSongData);
@@ -262,6 +266,14 @@ export class OfflineService {
       console.error('[OfflineService] Download error:', error);
       throw error;
     }
+  }
+
+  async updateOfflineOrder(songIds: string[]): Promise<void> {
+    await db.transaction('rw', db.offlineSongs, async () => {
+      for (let i = 0; i < songIds.length; i++) {
+        await db.offlineSongs.update(songIds[i], { orderIndex: i });
+      }
+    });
   }
 
   async removeDownload(songId: string): Promise<void> {
