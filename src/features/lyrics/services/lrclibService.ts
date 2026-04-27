@@ -97,23 +97,40 @@ export const lyricsService = {
     const lines = lrc.split('\n');
     const parsedLines: LyricsLine[] = [];
 
+    // Robust Regex: [mm:ss.xx] or [m:ss.xx] or [mm:ss] or [mm:ss:xx]
+    // Group 1: Minutes, Group 2: Seconds, Group 3: Optional separator (. or :), Group 4: Optional fractional part, Group 5: Text
+    const lrcRegex = /\[(\d{1,2}):(\d{2})(?:([.:])(\d{2,3}))?\](.*)/;
+
     lines.forEach(line => {
-      const match = line.match(/\[(\d{2}):(\d{2})\.(\d{2,3})\](.*)/);
+      const match = line.match(lrcRegex);
       if (match) {
         const minutes = parseInt(match[1]);
         const seconds = parseInt(match[2]);
-        const milliseconds = parseInt(match[3]);
-        
-        // Convert to total seconds
-        const time = minutes * 60 + seconds + (milliseconds / (match[3].length === 3 ? 1000 : 100));
-        const text = match[4].trim();
+        const separator = match[3];
+        const fractional = match[4];
+        const text = match[5].trim();
 
-        if (text) {
-          parsedLines.push({ time, text });
+        let time = minutes * 60 + seconds;
+
+        if (fractional) {
+          const val = parseInt(fractional);
+          if (separator === '.') {
+            // .xx is centiseconds (1/100) or .xxx is milliseconds (1/1000)
+            const divisor = fractional.length === 3 ? 1000 : 100;
+            time += val / divisor;
+          } else if (separator === ':') {
+            // :xx is sometimes used for frames or centiseconds
+            time += val / 100;
+          }
         }
+
+        // Only add if there is actual text or if it's an empty line used for timing
+        // (Some LRCs use empty text lines to "clear" the previous lyric)
+        parsedLines.push({ time, text });
       }
     });
 
-    return parsedLines;
+    // Sort by time just in case the LRC is out of order
+    return parsedLines.sort((a, b) => a.time - b.time);
   }
 };

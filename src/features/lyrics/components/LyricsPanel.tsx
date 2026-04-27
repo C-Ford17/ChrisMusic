@@ -20,6 +20,13 @@ export function LyricsPanel() {
   useEffect(() => {
     if (!lyrics || lyrics.length === 0) return;
 
+    // Detect if lyrics are actually synced (at least some lines have different times)
+    const isSynced = lyrics.length > 1 && lyrics.some(l => l.time > 0);
+    if (!isSynced) {
+      if (activeLineIndex !== -1) setActiveLineIndex(-1);
+      return;
+    }
+
     const index = lyrics.findIndex((line, i) => {
       const nextLine = lyrics[i + 1];
       return progress >= line.time && (!nextLine || progress < nextLine.time);
@@ -226,8 +233,15 @@ export function LyricsPanel() {
           lyrics.map((line, index) => (
             <p
               key={index}
-              onClick={() => line.time !== undefined && seekTo(line.time)}
-              className={`text-xl md:text-2xl lg:text-4xl font-bold leading-relaxed transition-colors duration-150 cursor-pointer snap-center tracking-tight ${
+              onClick={() => {
+                const isSynced = lyrics.some(l => l.time > 0);
+                if (isSynced && line.time !== undefined) {
+                  seekTo(line.time);
+                }
+              }}
+              className={`text-xl md:text-2xl lg:text-4xl font-bold leading-relaxed transition-colors duration-150 snap-center tracking-tight ${
+                lyrics.some(l => l.time > 0) ? 'cursor-pointer' : 'cursor-default'
+              } ${
                 activeLineIndex === index 
                 ? 'text-white drop-shadow-lg' 
                 : 'text-white/40 hover:text-white/80'
