@@ -216,36 +216,46 @@ export class OfflineService {
     try {
       console.log(`[OfflineService] Starting download for: ${song.title} (${song.id})`);
       
-      // Parallel fetch for audio and thumbnail
+      // Parallel fetch for audio and thumbnails
       let audioBlob: Blob;
       let thumbBlob: Blob | undefined;
+      let thumbHighResBlob: Blob | undefined;
+
+      const hqThumbUrl = YouTubeExtractionService.getFallbackThumbnail(song.id, song.thumbnailUrl);
+      const maxResThumbUrl = YouTubeExtractionService.getHighResThumbnail(song.id, song.thumbnailUrl);
 
       // Use local extraction for Android native app
       if (YouTubeExtractionService.isAndroid()) {
         console.log('[OfflineService] Android detected. Performing native extraction for:', song.id);
-        const [audio, thumb] = await Promise.all([
+        const [audio, thumb, thumbHigh] = await Promise.all([
           this.fetchNativeBlob('', song.id),
-          this.fetchNativeBlob(song.thumbnailUrl).catch(() => undefined)
+          this.fetchNativeBlob(hqThumbUrl).catch(() => undefined),
+          this.fetchNativeBlob(maxResThumbUrl).catch(() => undefined)
         ]);
         audioBlob = audio;
         thumbBlob = thumb;
+        thumbHighResBlob = thumbHigh;
       } else if (YouTubeExtractionService.isTauri()) {
         console.log('[OfflineService] Tauri detected. Fetching stream URL for download:', song.id);
         const streamUrl = await youtubeExtractionService.getStreamUrl(song.id);
-        const [audio, thumb] = await Promise.all([
+        const [audio, thumb, thumbHigh] = await Promise.all([
           this.fetchNativeBlob(streamUrl),
-          this.fetchNativeBlob(song.thumbnailUrl).catch(() => undefined)
+          this.fetchNativeBlob(hqThumbUrl).catch(() => undefined),
+          this.fetchNativeBlob(maxResThumbUrl).catch(() => undefined)
         ]);
         audioBlob = audio;
         thumbBlob = thumb;
+        thumbHighResBlob = thumbHigh;
       } else {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://chrismusic-production.up.railway.app";
-        const [audio, thumb] = await Promise.all([
+        const [audio, thumb, thumbHigh] = await Promise.all([
           this.fetchNativeBlob(`${apiUrl}/proxy?id=${song.id}`),
-          this.fetchNativeBlob(song.thumbnailUrl).catch(() => undefined)
+          this.fetchNativeBlob(hqThumbUrl).catch(() => undefined),
+          this.fetchNativeBlob(maxResThumbUrl).catch(() => undefined)
         ]);
         audioBlob = audio;
         thumbBlob = thumb;
+        thumbHighResBlob = thumbHigh;
       }
 
       const last = await db.offlineSongs.orderBy('orderIndex').last();
@@ -256,12 +266,26 @@ export class OfflineService {
         song: song,
         audioBlob,
         thumbnailBlob: thumbBlob,
+        thumbnailHighResBlob: thumbHighResBlob,
         downloadedAt: Date.now(),
         orderIndex: nextIndex
       };
 
       await db.offlineSongs.put(offlineSongData);
       console.log(`[OfflineService] Download complete for: ${song.title}`);
+
+      // Background: Fetch and save lyrics for offline use
+      try {
+        const { lyricsService } = await import('@/features/lyrics/services/lrclibService');
+        const lyrics = await lyricsService.getLyrics(song.artistName, song.title, song.duration);
+        if (lyrics) {
+          const { LibraryService } = await import('@/features/library/services/libraryService');
+          await LibraryService.saveLyrics(song.id, lyrics);
+          console.log(`[OfflineService] Lyrics saved for: ${song.title}`);
+        }
+      } catch (e) {
+        console.warn('[OfflineService] Failed to fetch lyrics during download:', e);
+      }
     } catch (error) {
       console.error('[OfflineService] Download error:', error);
       throw error;
@@ -298,33 +322,42 @@ export class OfflineService {
       }
 
       console.log(`[OfflineService] Caching song: ${song.title}`);
-      console.log(`[OfflineService] Caching song: ${song.title}`);
       let audioBlob: Blob;
       let thumbBlob: Blob | undefined;
+      let thumbHighResBlob: Blob | undefined;
+
+      const hqThumbUrl = YouTubeExtractionService.getFallbackThumbnail(song.id, song.thumbnailUrl);
+      const maxResThumbUrl = YouTubeExtractionService.getHighResThumbnail(song.id, song.thumbnailUrl);
       
       if (YouTubeExtractionService.isAndroid()) {
-        const [audio, thumb] = await Promise.all([
+        const [audio, thumb, thumbHigh] = await Promise.all([
           this.fetchNativeBlob('', song.id),
-          this.fetchNativeBlob(song.thumbnailUrl).catch(() => undefined)
+          this.fetchNativeBlob(hqThumbUrl).catch(() => undefined),
+          this.fetchNativeBlob(maxResThumbUrl).catch(() => undefined)
         ]);
         audioBlob = audio;
         thumbBlob = thumb;
+        thumbHighResBlob = thumbHigh;
       } else if (YouTubeExtractionService.isTauri()) {
         const streamUrl = await youtubeExtractionService.getStreamUrl(song.id);
-        const [audio, thumb] = await Promise.all([
+        const [audio, thumb, thumbHigh] = await Promise.all([
           this.fetchNativeBlob(streamUrl),
-          this.fetchNativeBlob(song.thumbnailUrl).catch(() => undefined)
+          this.fetchNativeBlob(hqThumbUrl).catch(() => undefined),
+          this.fetchNativeBlob(maxResThumbUrl).catch(() => undefined)
         ]);
         audioBlob = audio;
         thumbBlob = thumb;
+        thumbHighResBlob = thumbHigh;
       } else {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://chrismusic-production.up.railway.app";
-        const [audio, thumb] = await Promise.all([
+        const [audio, thumb, thumbHigh] = await Promise.all([
           this.fetchNativeBlob(`${apiUrl}/proxy?id=${song.id}`),
-          this.fetchNativeBlob(song.thumbnailUrl).catch(() => undefined)
+          this.fetchNativeBlob(hqThumbUrl).catch(() => undefined),
+          this.fetchNativeBlob(maxResThumbUrl).catch(() => undefined)
         ]);
         audioBlob = audio;
         thumbBlob = thumb;
+        thumbHighResBlob = thumbHigh;
       }
 
       const cachedSong: CachedSong = {
@@ -332,10 +365,24 @@ export class OfflineService {
         song: song,
         audioBlob,
         thumbnailBlob: thumbBlob,
+        thumbnailHighResBlob: thumbHighResBlob,
         cachedAt: Date.now()
       };
       
       await db.cachedSongs.put(cachedSong);
+
+      // Background: Fetch and save lyrics for offline use
+      try {
+        const { lyricsService } = await import('@/features/lyrics/services/lrclibService');
+        const lyrics = await lyricsService.getLyrics(song.artistName, song.title, song.duration);
+        if (lyrics) {
+          const { LibraryService } = await import('@/features/library/services/libraryService');
+          await LibraryService.saveLyrics(song.id, lyrics);
+          console.log(`[OfflineService] Lyrics saved to cache for: ${song.title}`);
+        }
+      } catch (e) {
+        console.warn('[OfflineService] Failed to fetch lyrics during caching:', e);
+      }
       
       // 3. Clean up oldest entries
       await this.cleanupCache();
@@ -428,56 +475,147 @@ export class OfflineService {
 
     const resolvedSong = { ...song };
 
-    // Resolve Thumbnail
+    // Resolve Thumbnail (Standard and High Res)
     try {
-      let needsRepair = false;
       const { Filesystem, Directory } = await import('@capacitor/filesystem');
+      const isAndroid = YouTubeExtractionService.isAndroid();
 
-      if (record.thumbnailFilePath && YouTubeExtractionService.isAndroid()) {
-        const isCorrupted = record.thumbnailFilePath.endsWith('.aac');
-        
-        // Check if file exists and is not corrupted
-        try {
-          const fileName = record.thumbnailFilePath.split('/').pop() || '';
-          await Filesystem.stat({ path: fileName, directory: Directory.Cache });
-          
-          if (isCorrupted) {
-            console.warn('[OfflineService] Corrupted thumbnail extension detected, forcing repair:', record.thumbnailFilePath);
-            needsRepair = true;
+      const resolveThumbnail = async (
+        blob: Blob | undefined, 
+        existingPath: string | undefined, 
+        prefix: string,
+        dbField: 'thumbnailFilePath' | 'thumbnailHighResFilePath'
+      ): Promise<string | undefined> => {
+        if (existingPath && isAndroid) {
+          try {
+            const fileName = existingPath.split('/').pop() || '';
+            await Filesystem.stat({ path: fileName, directory: Directory.Cache });
+            if (!existingPath.endsWith('.aac')) return existingPath;
+          } catch (e) { /* missing or corrupted */ }
+        }
+
+        if (blob) {
+          if (isAndroid) {
+            const uri = await this.blobToNativeFileUri(blob, `${prefix}_${song.id}`);
+            if (uri) {
+              const updateObj = { [dbField]: uri };
+              if (isCached) await db.cachedSongs.update(song.id, updateObj);
+              else await db.offlineSongs.update(song.id, updateObj);
+              return uri;
+            }
           } else {
-            resolvedSong.thumbnailUrl = record.thumbnailFilePath;
+            return URL.createObjectURL(blob);
           }
-        } catch (e) {
-          console.warn('[OfflineService] Missing thumbnail file or inaccessible path:', record.thumbnailFilePath);
-          needsRepair = true;
         }
-      }
+        return undefined;
+      };
 
-      if ((!record.thumbnailFilePath || needsRepair) && record.thumbnailBlob) {
-        if (YouTubeExtractionService.isAndroid()) {
-          // Re-generate with correct extension derived from updated blobToNativeFileUri logic
-          const uri = await this.blobToNativeFileUri(record.thumbnailBlob, `thumb_${song.id}`);
-          if (uri) {
-            console.log('[OfflineService] Successfully repaired/generated thumbnail:', uri);
-            resolvedSong.thumbnailUrl = uri;
-            const updateObj = { thumbnailFilePath: uri };
-            if (isCached) await db.cachedSongs.update(song.id, updateObj);
-            else await db.offlineSongs.update(song.id, updateObj);
-          }
-        } else {
-          resolvedSong.thumbnailUrl = URL.createObjectURL(record.thumbnailBlob);
-        }
-      } else if (record.thumbnailBlob && !YouTubeExtractionService.isAndroid()) {
-         resolvedSong.thumbnailUrl = URL.createObjectURL(record.thumbnailBlob);
-      }
+      // Resolve Standard Thumbnail
+      const stdPath = await resolveThumbnail(record.thumbnailBlob, record.thumbnailFilePath, 'thumb', 'thumbnailFilePath');
+      if (stdPath) resolvedSong.thumbnailUrl = stdPath;
+
+      // Resolve High Res Thumbnail
+      const highPath = await resolveThumbnail(record.thumbnailHighResBlob, record.thumbnailHighResFilePath, 'thumb_high', 'thumbnailHighResFilePath');
+      if (highPath) resolvedSong.thumbnailHighResUrl = highPath;
+      else if (stdPath) resolvedSong.thumbnailHighResUrl = stdPath; // Fallback to std if high-res missing
     } catch (e) {
-      console.warn('[OfflineService] Failed to resolve local thumbnail:', e);
+      console.warn('[OfflineService] Failed to resolve local thumbnails:', e);
     }
 
     // Resolve Audio URL
     const audioUrl = isCached ? await this.getCachedUrl(song.id) : await this.getOfflineUrl(song.id);
 
     return { song: resolvedSong, audioUrl };
+  }
+
+  /**
+   * Quick check for a song's offline thumbnail without resolving audio.
+   * Useful for UI lists.
+   */
+  async getOfflineThumbnail(songId: string, preferHighRes: boolean = false): Promise<string | null> {
+    const record = await db.offlineSongs.get(songId) || await db.cachedSongs.get(songId);
+    if (!record) return null;
+
+    if (preferHighRes && (record.thumbnailHighResFilePath || record.thumbnailHighResBlob)) {
+      if (record.thumbnailHighResFilePath && YouTubeExtractionService.isAndroid()) return record.thumbnailHighResFilePath;
+      if (record.thumbnailHighResBlob) return URL.createObjectURL(record.thumbnailHighResBlob);
+    }
+
+    if (record.thumbnailFilePath && YouTubeExtractionService.isAndroid()) return record.thumbnailFilePath;
+    return record.thumbnailBlob ? URL.createObjectURL(record.thumbnailBlob) : null;
+  }
+
+  /**
+   * Scans all offline and cached songs to fetch missing high-res thumbnails and lyrics.
+   * Useful for users with existing downloads before these features were added.
+   */
+  async repairMetadata(onProgress?: (current: number, total: number, songTitle: string) => void): Promise<void> {
+    const offline = await db.offlineSongs.toArray();
+    const cached = await db.cachedSongs.toArray();
+    const all = [...offline, ...cached];
+    
+    console.log(`[OfflineService] Starting metadata repair for ${all.length} songs`);
+    
+    const { lyricsService } = await import('@/features/lyrics/services/lrclibService');
+    const { LibraryService } = await import('@/features/library/services/libraryService');
+
+    let current = 0;
+    for (const record of all) {
+      current++;
+      const song = record.song;
+      if (onProgress) onProgress(current, all.length, song.title);
+
+      const needsHighRes = !record.thumbnailHighResBlob && !record.thumbnailHighResFilePath;
+      const lyrics = await LibraryService.getLyrics(song.id);
+      const needsLyrics = !lyrics;
+
+      if (!needsHighRes && !needsLyrics) continue;
+
+      try {
+        const promises: Promise<any>[] = [];
+
+        // 1. Fetch High-Res Thumbnail if missing
+        if (needsHighRes) {
+          const maxResUrl = YouTubeExtractionService.getHighResThumbnail(song.id, song.thumbnailUrl);
+          promises.push(
+            this.fetchNativeBlob(maxResUrl)
+              .then(async (blob) => {
+                if (blob) {
+                  const updateObj: any = { thumbnailHighResBlob: blob };
+                  if (YouTubeExtractionService.isAndroid()) {
+                    const uri = await this.blobToNativeFileUri(blob, `thumb_high_${song.id}`);
+                    if (uri) updateObj.thumbnailHighResFilePath = uri;
+                  }
+                  
+                  if ('downloadedAt' in record) {
+                    await db.offlineSongs.update(song.id, updateObj);
+                  } else {
+                    await db.cachedSongs.update(song.id, updateObj);
+                  }
+                }
+              })
+              .catch(() => console.warn(`[OfflineService] Could not fetch high-res thumb for ${song.title}`))
+          );
+        }
+
+        // 2. Fetch Lyrics if missing
+        if (needsLyrics) {
+          promises.push(
+            lyricsService.getLyrics(song.artistName, song.title, song.duration)
+              .then(async (l) => {
+                if (l) await LibraryService.saveLyrics(song.id, l);
+              })
+              .catch(() => console.warn(`[OfflineService] Could not fetch lyrics for ${song.title}`))
+          );
+        }
+
+        await Promise.all(promises);
+      } catch (e) {
+        console.error(`[OfflineService] Error repairing ${song.title}:`, e);
+      }
+    }
+    
+    console.log('[OfflineService] Metadata repair complete');
   }
 }
 

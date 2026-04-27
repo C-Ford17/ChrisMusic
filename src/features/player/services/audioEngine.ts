@@ -403,7 +403,7 @@ class AudioEngine {
    *   Same as before — HTMLAudioElement.
    */
   public async loadSong(
-    song: { id?: string; title: string; artistName: string; albumName?: string; thumbnailUrl?: string; streamUrl?: string },
+    song: { id?: string; title: string; artistName: string; albumName?: string; thumbnailUrl?: string; thumbnailHighResUrl?: string; streamUrl?: string },
     startSeconds = 0,
     autoplay = true,
     localUrl?: string
@@ -491,7 +491,7 @@ class AudioEngine {
   // ─── ExoPlayer-specific song loading ──────────────────────────────────────
 
   private async loadSongExoPlayer(
-    song: { id?: string; title: string; artistName: string; thumbnailUrl?: string; streamUrl?: string },
+    song: { id?: string; title: string; artistName: string; thumbnailUrl?: string; thumbnailHighResUrl?: string; streamUrl?: string },
     startSeconds: number,
     autoplay: boolean,
     localUrl?: string,
@@ -510,7 +510,7 @@ class AudioEngine {
       if (this.onSourceChange) this.onSourceChange(this.currentUrlSource);
 
       try {
-        const artworkUrl = YouTubeExtractionService.getFallbackThumbnail(song.id, song.thumbnailUrl);
+        const artworkUrl = song.thumbnailHighResUrl || YouTubeExtractionService.getFallbackThumbnail(song.id, song.thumbnailUrl);
         await this.callExoLoad(url, song.title, song.artistName, artworkUrl, song.id);
         
         if (loadId && this.currentLoadId !== loadId) {
@@ -560,7 +560,7 @@ class AudioEngine {
       this.currentUrlSource = 'youtube';
       if (this.onSourceChange) this.onSourceChange('youtube');
 
-      const artworkUrl = YouTubeExtractionService.getFallbackThumbnail(song.id, song.thumbnailUrl);
+      const artworkUrl = song.thumbnailHighResUrl || YouTubeExtractionService.getFallbackThumbnail(song.id, song.thumbnailUrl);
       await this.callExoLoad(streamUrl, song.title, song.artistName, artworkUrl);
       
       if (loadId && this.currentLoadId !== loadId) {
@@ -591,11 +591,11 @@ class AudioEngine {
   // ─── MediaSession (Web only) ───────────────────────────────────────────────
 
   private async setWebMediaSession(
-    song: { id?: string; title: string; artistName: string; albumName?: string; thumbnailUrl?: string },
+    song: { id?: string; title: string; artistName: string; albumName?: string; thumbnailUrl?: string; thumbnailHighResUrl?: string },
     autoplay: boolean
   ) {
     if (!('mediaSession' in navigator)) return;
-    const artworkUrl = YouTubeExtractionService.getFallbackThumbnail(song.id, song.thumbnailUrl);
+    const artworkUrl = song.thumbnailHighResUrl || YouTubeExtractionService.getFallbackThumbnail(song.id, song.thumbnailUrl);
     
     const metadata = {
       title: song.title,
@@ -750,7 +750,7 @@ class AudioEngine {
         url,
         title: song.title,
         artist: song.artistName,
-        artwork: YouTubeExtractionService.getFallbackThumbnail(song.id, song.thumbnailUrl)
+        artwork: song.thumbnailHighResUrl || YouTubeExtractionService.getFallbackThumbnail(song.id, song.thumbnailUrl)
       });
     } catch (e) {
       console.error('[AudioEngine] Failed to add next track natively:', e);

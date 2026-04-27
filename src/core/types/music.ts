@@ -3,6 +3,7 @@ export interface Song {
   title: string;
   artistName: string;
   thumbnailUrl: string;
+  thumbnailHighResUrl?: string;
   sourceType: string;
   duration?: number;
   durationText?: string;

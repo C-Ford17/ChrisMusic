@@ -140,22 +140,22 @@ export class YouTubeExtractionService {
     const isDesktopPath = url.startsWith('asset:') || url.startsWith('http://asset.localhost');
     const isBlob = url.startsWith('blob:');
 
-    // Case 1: On Android, fixing Desktop or Blob paths
+    // Case 1: On Android, fixing Desktop paths
     if (this.isAndroid()) {
       if (url.startsWith('file://')) {
         try { return Capacitor.convertFileSrc(url); } catch { return url; }
       }
       // If we see a desktop-only path on Android, we fallback to YouTube
-      if ((isDesktopPath || isBlob) && songId) {
+      if (isDesktopPath && songId) {
         return `https://i.ytimg.com/vi/${songId}/mqdefault.jpg`;
       }
       return url;
     }
 
-    // Case 2: On Desktop (Tauri), fixing Android or Blob paths
+    // Case 2: On Desktop (Tauri), fixing Android paths
     if (this.isTauri()) {
-      // If we see an android-only path or a blob on PC, we fallback to YouTube
-      if ((isAndroidPath || isBlob || url.startsWith('file://')) && songId) {
+      // If we see an android-only path on PC, we fallback to YouTube
+      if ((isAndroidPath || url.startsWith('file://')) && songId) {
         return `https://i.ytimg.com/vi/${songId}/mqdefault.jpg`;
       }
       return url;

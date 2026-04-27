@@ -12,6 +12,7 @@ import { LibraryService } from '@/features/library/services/libraryService';
 import { offlineService } from '@/features/library/services/offlineService';
 import { MarqueeText } from '@/shared/components/MarqueeText';
 import { SortableSongList } from '@/shared/components/SortableSongList';
+import { SongImage } from '@/shared/components/SongImage';
 import { YouTubeExtractionService } from '@/features/player/services/youtubeExtractionService';
 import { useRouter } from 'next/navigation';
 
@@ -241,7 +242,7 @@ export default function LibraryPage() {
                 onClick={() => router.push(`/artist?id=${artist.id}`)}
               >
                 <div className="relative aspect-square rounded-full overflow-hidden shadow-lg mb-4 ring-2 ring-black/5 dark:ring-white/5 group-hover:scale-105 transition-transform duration-500">
-                  <Image src={YouTubeExtractionService.normalizeUrl(artist.thumbnailUrl)} alt={artist.name} fill className="object-cover" />
+                  <SongImage songId={artist.id} fallbackUrl={artist.thumbnailUrl} alt={artist.name} fill className="object-cover" />
                 </div>
                 <h3 className="font-bold text-sm text-black dark:text-white line-clamp-1">{artist.name}</h3>
               </div>
@@ -265,7 +266,7 @@ export default function LibraryPage() {
                 onClick={() => router.push(`/album?id=${album.id}`)}
               >
                 <div className="relative aspect-square rounded-[32px] overflow-hidden shadow-lg mb-4 ring-1 ring-black/5 dark:ring-white/5 group-hover:scale-105 transition-transform duration-500">
-                  <Image src={YouTubeExtractionService.normalizeUrl(album.thumbnailUrl)} alt={album.title} fill className="object-cover" />
+                  <SongImage songId={album.id} fallbackUrl={album.thumbnailUrl} alt={album.title} fill className="object-cover" />
                 </div>
                 <h3 className="font-bold text-sm text-black dark:text-white line-clamp-1">{album.title}</h3>
                 <p className="text-[10px] text-gray-500 font-medium uppercase tracking-widest mt-1 truncate">{album.artistName}</p>
@@ -292,7 +293,7 @@ export default function LibraryPage() {
               >
                 <div className="flex items-center min-w-0 pr-4">
                   <div className="relative w-14 h-14 mr-4 shrink-0 bg-gray-200 dark:bg-black rounded-xl overflow-hidden shadow-sm group-hover:scale-105 transition-transform">
-                    <Image src={YouTubeExtractionService.normalizeUrl(hist.song.thumbnailUrl, hist.song.id)} alt={hist.song.title} fill sizes="56px" className="object-cover" />
+                    <SongImage songId={hist.song.id} fallbackUrl={hist.song.thumbnailUrl} alt={hist.song.title} fill sizes="56px" className="object-cover" />
                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                       <Play size={24} className="text-white" fill="currentColor" />
                     </div>

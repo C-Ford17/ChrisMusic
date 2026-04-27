@@ -17,9 +17,9 @@ import { AddToPlaylistModal } from '@/shared/components/AddToPlaylistModal';
 import { VolumeControl } from './VolumeControl';
 import { LyricsPanel } from '@/features/lyrics/components/LyricsPanel';
 import { MarqueeText } from '@/shared/components/MarqueeText';
-import Image from 'next/image';
-import { useSettingsStore } from '@/features/settings/store/settingsStore';
 import { YouTubeExtractionService } from '@/features/player/services/youtubeExtractionService';
+import { SongImage } from '@/shared/components/SongImage';
+import { useSettingsStore } from '@/features/settings/store/settingsStore';
 
 function formatTime(seconds: number) {
   if (!seconds || isNaN(seconds)) return '0:00';
@@ -244,17 +244,13 @@ export function PlayerOverlay() {
             />
 
             <div className="relative z-10 w-12 h-12 sm:w-16 sm:h-16 mr-3 shrink-0 bg-gray-200 dark:bg-black rounded-lg sm:rounded-xl shadow-sm overflow-hidden group">
-              <Image 
-                key={`${currentSong.id}-mini-${thumbError}`}
-                src={thumbError 
-                  ? YouTubeExtractionService.getFallbackThumbnail(currentSong.id)
-                  : YouTubeExtractionService.normalizeUrl(currentSong.thumbnailUrl, currentSong.id)
-                } 
+              <SongImage 
+                songId={currentSong.id}
+                fallbackUrl={currentSong.thumbnailUrl}
                 alt={currentSong.title} 
                 fill 
                 sizes="(min-width: 640px) 64px, 48px" 
                 className="object-cover group-hover:scale-110 transition-transform"
-                onError={() => setThumbError(true)}
               />
             </div>
             <div className="relative z-10 flex-1 min-w-0 mr-4 sm:max-w-xs">
@@ -356,29 +352,14 @@ export function PlayerOverlay() {
                   }}
                   className="absolute inset-0 transition-all duration-1000"
                 >
-                  <Image 
-                    key={`${currentSong.id}-full-${thumbError}`}
-                    src={thumbError 
-                      ? YouTubeExtractionService.normalizeUrl(currentSong.thumbnailUrl, currentSong.id)
-                      : YouTubeExtractionService.getHighResThumbnail(currentSong.id)
-                    }
+                  <SongImage 
+                    songId={currentSong.id}
+                    fallbackUrl={currentSong.thumbnailUrl}
+                    preferHighRes={true}
                     alt="" 
                     fill 
                     className="object-cover object-center"
                     priority
-                    onLoad={(e) => {
-                      const img = e.target as HTMLImageElement;
-                      // YouTube returns a 120x90 placeholder if maxres doesn't exist.
-                      // Anything under 400px wide is likely not the high-res artwork we want.
-                      if (!thumbError && img.naturalWidth > 0 && img.naturalWidth < 400) {
-                        console.log('[PlayerOverlay] Detected small YouTube placeholder, falling back...');
-                        setThumbError(true);
-                      }
-                    }}
-                    onError={() => {
-                      console.log('[PlayerOverlay] Image load error, falling back...');
-                      setThumbError(true);
-                    }}
                   />
                 </motion.div>
                 {/* Degradados de legibilidad: Muy suaves */}
@@ -538,7 +519,7 @@ export function PlayerOverlay() {
                            <div key={`${song.id}-${idx}`} className={`group flex items-center justify-between p-5 rounded-[25px] transition-all cursor-pointer border ${currentSong.id === song.id ? 'bg-[var(--accent-primary)]/20 border-[var(--accent-primary)]/40 shadow-[0_10px_30px_var(--accent-primary)]/20' : 'bg-white/2 border-white/5 hover:bg-white/10 hover:border-white/20'}`} onClick={() => playFromQueue(idx)}>
                              <div className="flex items-center min-w-0 pr-4">
                                <div className="relative w-14 h-14 mr-5 shrink-0 rounded-2xl overflow-hidden shadow-xl">
-                                 <Image src={YouTubeExtractionService.normalizeUrl(song.thumbnailUrl, song.id)} alt={song.title} fill sizes="56px" className="object-cover" />
+                                 <SongImage songId={song.id} fallbackUrl={song.thumbnailUrl} alt={song.title} fill sizes="56px" className="object-cover" />
                                </div>
                                <div className="min-w-0">
                                  <h4 className={`text-base font-bold truncate ${currentSong.id === song.id ? 'text-[var(--accent-primary)]' : 'text-white'}`}>{song.title}</h4>

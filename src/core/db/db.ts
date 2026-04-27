@@ -53,8 +53,10 @@ export interface OfflineSong {
   song: LocalSong;
   audioBlob?: Blob; // Optional for Web (PWA)
   filePath?: string; // Optional for Native (Capacitor)
-  thumbnailBlob?: Blob; // Image for offline display
+  thumbnailBlob?: Blob; // Image for offline display (standard quality)
   thumbnailFilePath?: string; // Image for native notification
+  thumbnailHighResBlob?: Blob; // High resolution image for big player
+  thumbnailHighResFilePath?: string;
   downloadedAt: number;
   orderIndex?: number;
 }
@@ -66,6 +68,8 @@ export interface CachedSong {
   filePath?: string; // Optional for Native (Capacitor)
   thumbnailBlob?: Blob;
   thumbnailFilePath?: string;
+  thumbnailHighResBlob?: Blob;
+  thumbnailHighResFilePath?: string;
   cachedAt: number;
 }
 
@@ -112,7 +116,8 @@ export class ChrisMusicDB extends Dexie {
     // Version 8: Added thumbnail storage
     // Version 9: Added FollowedArtists and SavedAlbums
     // Version 10: Added orderIndex for manual reordering
-    this.version(10).stores({
+    // Version 11: Added high-res thumbnail storage
+    this.version(11).stores({
       favorites: 'id, addedAt, orderIndex',
       history: '++id, playedAt',
       playlists: 'id, createdAt',

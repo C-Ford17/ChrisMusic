@@ -20,6 +20,7 @@ import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { usePlayerStore } from '@/features/player/store/playerStore';
 import { MaintenanceService } from '@/features/library/services/maintenanceService';
+import { offlineService } from '@/features/library/services/offlineService';
 import { youtubeExtractionService } from '@/features/player/services/youtubeExtractionService';
 import { useState, useEffect } from 'react';
 
@@ -39,6 +40,8 @@ export default function SettingsPage() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isSavingLocal, setIsSavingLocal] = useState(false);
   const [isTauri, setIsTauri] = useState(false);
+  const [isRepairing, setIsRepairing] = useState(false);
+  const [repairProgress, setRepairProgress] = useState({ current: 0, total: 0, title: '' });
 
   useEffect(() => {
     setIsTauri(typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__);
@@ -175,6 +178,21 @@ export default function SettingsPage() {
   const handleClearCache = async () => {
     if (confirm('¿Limpiar caché temporal? (Las descargas permanentes NO se borran)')) {
       await MaintenanceService.clearAppCache();
+    }
+  };
+
+  const handleRepairMetadata = async () => {
+    setIsRepairing(true);
+    try {
+      await offlineService.repairMetadata((current, total, title) => {
+        setRepairProgress({ current, total, title });
+      });
+      toast.success('Mantenimiento completado. Se han actualizado las imágenes y letras.');
+    } catch (err) {
+      toast.error('Error durante el mantenimiento');
+    } finally {
+      setIsRepairing(false);
+      setRepairProgress({ current: 0, total: 0, title: '' });
     }
   };
 
@@ -386,6 +404,26 @@ export default function SettingsPage() {
                 <div>
                   <p className="font-black text-lg tracking-tight">Limpiar Caché</p>
                   <p className="text-sm font-bold text-amber-500/50 mt-0.5 uppercase tracking-widest text-[10px]">No borra descargas permanentes</p>
+                </div>
+              </div>
+            </button>
+
+            <button
+              onClick={handleRepairMetadata}
+              disabled={isRepairing}
+              className="w-full flex items-center justify-between p-8 hover:bg-[var(--accent-primary)]/10 transition-all text-left border-t border-black/5 dark:border-white/5 group disabled:opacity-50"
+            >
+              <div className="flex items-center gap-5 text-[var(--accent-primary)]">
+                <div className={`p-4 bg-[var(--accent-primary)]/10 rounded-2xl group-hover:bg-[var(--accent-primary)] group-hover:text-white transition-all ${isRepairing ? 'animate-pulse' : ''}`}>
+                  <RefreshCw size={24} className={isRepairing ? 'animate-spin' : ''} />
+                </div>
+                <div>
+                  <p className="font-black text-lg tracking-tight">Sincronizar Metadatos</p>
+                  <p className="text-sm font-bold opacity-50 mt-0.5 uppercase tracking-widest text-[10px]">
+                    {isRepairing 
+                      ? `Reparando (${repairProgress.current}/${repairProgress.total}): ${repairProgress.title}` 
+                      : 'Descargar carátulas HD y letras faltantes'}
+                  </p>
                 </div>
               </div>
             </button>

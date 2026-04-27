@@ -21,9 +21,9 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
 import { GripVertical, Play, Trash2, ArrowUpDown, Type, User } from 'lucide-react';
-import Image from 'next/image';
 import { Song } from '@/core/types/music';
 import { MarqueeText } from './MarqueeText';
+import { SongImage } from './SongImage';
 import { YouTubeExtractionService } from '@/features/player/services/youtubeExtractionService';
 
 interface SortableSongItemProps {
@@ -72,8 +72,9 @@ function SortableSongItem({ id, song, isEditing, onPlay, onRemove }: SortableSon
           </div>
         )}
         <div className="relative w-14 h-14 mr-4 shrink-0 bg-gray-200 dark:bg-black rounded-2xl overflow-hidden shadow-sm">
-          <Image 
-            src={YouTubeExtractionService.normalizeUrl(song.thumbnailUrl, song.id)} 
+          <SongImage 
+            songId={song.id}
+            fallbackUrl={song.thumbnailUrl} 
             alt={song.title} 
             fill 
             sizes="56px" 
