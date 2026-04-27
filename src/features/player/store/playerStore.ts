@@ -189,6 +189,15 @@ export const usePlayerStore = create<PlayerState>()(
       },
 
       playSong: async (song: Song, startSeconds: number = 0) => {
+        // Idempotency: If the song is already the current one and the engine has a source, 
+        // just open the player overlay and ensure it's playing if it was paused.
+        if (get().currentSong?.id === song.id && audioEngine.hasSource()) {
+          console.log('[PlayerStore] Song already active, opening overlay:', song.title);
+          if (!get().isPlaying) get().play();
+          get().setIsNowPlayingOpen(true);
+          return;
+        }
+
         // Prevent double loading the same song if already buffering, unless we need to reload (rehydration)
         if (get().currentSong?.id === song.id && get().isBuffering && audioEngine.hasSource()) {
           console.log('[PlayerStore] Already buffering:', song.title);
@@ -274,6 +283,17 @@ export const usePlayerStore = create<PlayerState>()(
       },
 
       playSongInQueue: async (song: Song, queue: Song[], startSeconds: number = 0) => {
+        // Idempotency: If the song is already the current one and the engine has a source, 
+        // just open the player overlay and ensure it's playing if it was paused.
+        if (get().currentSong?.id === song.id && audioEngine.hasSource()) {
+          console.log('[PlayerStore] Song already active in queue, opening overlay:', song.title);
+          // Optional: Update queue if it changed significantly? 
+          // For now, let's just keep the existing behavior of opening the player.
+          if (!get().isPlaying) get().play();
+          get().setIsNowPlayingOpen(true);
+          return;
+        }
+
         // Prevent double loading
         if (get().currentSong?.id === song.id && get().isBuffering) {
           console.log('[PlayerStore] Already buffering in queue:', song.title);
