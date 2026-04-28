@@ -1,10 +1,10 @@
 {
   "version": "1.1.0",
   "notes": "v1.1.0: Estabilización de carátulas (cuadradas sin bordes), inyección instantánea de alta resolución en player y mejoras en motor nativo.",
-  "pub_date": "2026-04-27T18:05:48Z",
+  "pub_date": "2026-04-28T04:59:03Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUR3B1OFN2ZzZwSzlSWUN6RlJSTVVKU3IrT0k0NStIZ29XVjRTMVN2Mk91eWRXcWwzamkzSDM5SnRLMnBDTWY5UHF1N2dDdGdwQ1pyQVlkaVVwNVpEamdCS2p2UUdqOEFBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc3MzA5MTY0CWZpbGU6Q2hyaXNNdXNpY18xLjAuMTRfeDY0LXNldHVwLmV4ZQo3SjZPSDJ3RXNLNlpvNnVrb2E4YUx4ZFhJMTZ3bzFRczNqMUFtRTBvOHlReGJ3a3F5RmphcDVtR0pwYkkyc3ZEZnhLTmQvRDNra2lhaDdUZVlTd1NCUT09Cg==",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUR3B1OFN2ZzZwSzJYeHZtWjk1YlVwZFNYb1UvSzZ6Q3U3OEU2b1pmRUJxaFZremgySDBqUzg4V25uUmpEN1liVE50VXdMNGVlUldHdmRWUkRXeWZzSDFBeTEvb3MwdmdRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc3MzUyMzQyCWZpbGU6Q2hyaXNNdXNpY18xLjEuMF94NjQtc2V0dXAuZXhlCk9oVi9lWStaR0JOWFB6MkFUNWUwUzgzTERhSGM3cjgycDdidVVGdGsyRkpqMUdXM3k3dFlobGJGZUplbm8vYVFMVEFXN3Y5eVJPMVRtdlBKa2xkaEFnPT0K",
       "url": "https://github.com/C-Ford17/ChrisMusic/releases/download/tauri-1.1.0/ChrisMusic_1.1.0_x64-setup.exe"
     }
   },
