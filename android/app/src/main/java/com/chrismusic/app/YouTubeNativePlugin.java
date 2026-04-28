@@ -119,6 +119,16 @@ public class YouTubeNativePlugin extends Plugin {
         request.addOption("--no-update");
     }
 
+    private String getBestClient() {
+        return getContext().getSharedPreferences("yt_native", Context.MODE_PRIVATE)
+                .getString("best_client", "web");
+    }
+
+    private void saveBestClient(String client) {
+        getContext().getSharedPreferences("yt_native", Context.MODE_PRIVATE)
+                .edit().putString("best_client", client).apply();
+    }
+
     @PluginMethod
     public void getStreamUrl(PluginCall call) {
         String videoId = call.getString("videoId");
@@ -130,17 +140,20 @@ public class YouTubeNativePlugin extends Plugin {
         new Thread(() -> {
             try {
                 ensureEngineReady();
-                // web: default client, n-challenge handled by yt-dlp internally.
-                // bestaudio/best (no ext filter) so any audio format is accepted by ExoPlayer.
-                String url = tryExtractUrl(videoId, "web");
-                if (url == null || url.isEmpty()) {
-                    Log.w(TAG, "[Stream] web client failed, retrying with android...");
-                    url = tryExtractUrl(videoId, "android");
+                
+                String best = getBestClient();
+                String[] clients = {best, "ios", "web", "android", "tv_embedded"};
+                
+                String url = null;
+                for (String client : clients) {
+                    if (url != null && !url.isEmpty()) break;
+                    Log.d(TAG, "[Stream] Trying client: " + client);
+                    url = tryExtractUrl(videoId, client);
+                    if (url != null && !url.isEmpty()) {
+                        saveBestClient(client);
+                    }
                 }
-                if (url == null || url.isEmpty()) {
-                    Log.w(TAG, "[Stream] android client failed, retrying with tv_embedded...");
-                    url = tryExtractUrl(videoId, "tv_embedded");
-                }
+
                 if (url == null || url.isEmpty()) {
                     call.reject("Extraction returned empty URL after all retries");
                     return;
@@ -212,23 +225,23 @@ public class YouTubeNativePlugin extends Plugin {
             try {
                 ensureEngineReady();
 
-                // Prepare temp output file
                 File tempFile = new File(getContext().getCacheDir(), videoId + ".aac");
                 if (tempFile.exists()) tempFile.delete();
 
-                // web client first, fallback to android, then tv_embedded
-                boolean downloaded = tryDownload(videoId, "web", tempFile);
-                if (!downloaded) {
-                    Log.w(TAG, "[ADTS] web download failed, retrying with android...");
-                    downloaded = tryDownload(videoId, "android", tempFile);
-                }
-                if (!downloaded) {
-                    Log.w(TAG, "[ADTS] android download failed, retrying with tv_embedded...");
-                    downloaded = tryDownload(videoId, "tv_embedded", tempFile);
+                String best = getBestClient();
+                String[] clients = {best, "ios", "web", "android", "tv_embedded"};
+                
+                boolean downloaded = false;
+                for (String client : clients) {
+                    if (downloaded) break;
+                    Log.d(TAG, "[ADTS] Trying download client: " + client);
+                    downloaded = tryDownload(videoId, client, tempFile);
+                    if (downloaded) {
+                        saveBestClient(client);
+                    }
                 }
 
                 if (!downloaded || !tempFile.exists() || tempFile.length() == 0) {
-                    // yt-dlp sometimes appends extension
                     File fallback = new File(getContext().getCacheDir(), videoId + ".aac.aac");
                     if (fallback.exists() && fallback.length() > 0) {
                         tempFile = fallback;

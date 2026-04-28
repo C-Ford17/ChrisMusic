@@ -757,6 +757,18 @@ class AudioEngine {
     }
   }
 
+  /**
+   * Syncs a batch of tracks to the native playlist.
+   */
+  async setPlaylist(songs: { id: string; url: string; title: string; artist: string; artwork: string }[]) {
+    if (!YouTubeExtractionService.isAndroid()) return;
+    try {
+      await (ExoPlayerNative as any).setPlaylist({ items: songs });
+    } catch (e) {
+      console.error('[AudioEngine] Failed to set native playlist:', e);
+    }
+  }
+
   async setRepeatMode(mode: 'off' | 'one' | 'all') {
     if (YouTubeExtractionService.isAndroid()) {
       await ExoPlayerNative.setRepeatMode({ mode });

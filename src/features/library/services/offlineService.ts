@@ -2,6 +2,7 @@ import { db, type OfflineSong, type CachedSong } from '@/core/db/db';
 import { type Song } from '@/core/types/music';
 import { youtubeExtractionService, YouTubeExtractionService } from '@/features/player/services/youtubeExtractionService';
 import { toast } from 'sonner';
+import { useDownloadStore } from '@/features/library/store/downloadStore';
 
 export class OfflineService {
   private static instance: OfflineService;
@@ -213,7 +214,11 @@ export class OfflineService {
   async downloadSong(song: Song): Promise<void> {
     if (await this.isDownloaded(song.id)) return;
 
+    const downloadStore = useDownloadStore.getState();
+    downloadStore.addDownload(song);
+
     try {
+      downloadStore.updateProgress(song.id, 10);
       console.log(`[OfflineService] Starting download for: ${song.title} (${song.id})`);
       
       // Parallel fetch for audio and thumbnails
@@ -224,13 +229,26 @@ export class OfflineService {
       const hqThumbUrl = YouTubeExtractionService.getFallbackThumbnail(song.id, song.thumbnailUrl);
       const maxResThumbUrl = YouTubeExtractionService.getHighResThumbnail(song.id, song.thumbnailUrl);
 
+      const fetchWithRetry = async (url: string, retries = 2): Promise<Blob | undefined> => {
+        for (let i = 0; i <= retries; i++) {
+          try {
+            return await this.fetchNativeBlob(url);
+          } catch (e) {
+            if (i === retries) return undefined;
+            // Linear backoff
+            await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+          }
+        }
+        return undefined;
+      };
+
       // Use local extraction for Android native app
       if (YouTubeExtractionService.isAndroid()) {
         console.log('[OfflineService] Android detected. Performing native extraction for:', song.id);
-        const [audio, thumb, thumbHigh] = await Promise.all([
-          this.fetchNativeBlob('', song.id),
-          this.fetchNativeBlob(hqThumbUrl).catch(() => undefined),
-          this.fetchNativeBlob(maxResThumbUrl).catch(() => undefined)
+        const audio = await this.fetchNativeBlob('', song.id);
+        const [thumb, thumbHigh] = await Promise.all([
+          fetchWithRetry(hqThumbUrl),
+          fetchWithRetry(maxResThumbUrl)
         ]);
         audioBlob = audio;
         thumbBlob = thumb;
@@ -238,25 +256,19 @@ export class OfflineService {
       } else if (YouTubeExtractionService.isTauri()) {
         console.log('[OfflineService] Tauri detected. Fetching stream URL for download:', song.id);
         const streamUrl = await youtubeExtractionService.getStreamUrl(song.id);
-        const [audio, thumb, thumbHigh] = await Promise.all([
-          this.fetchNativeBlob(streamUrl),
-          this.fetchNativeBlob(hqThumbUrl).catch(() => undefined),
-          this.fetchNativeBlob(maxResThumbUrl).catch(() => undefined)
+        const audio = await this.fetchNativeBlob(streamUrl);
+        const [thumb, thumbHigh] = await Promise.all([
+          fetchWithRetry(hqThumbUrl),
+          fetchWithRetry(maxResThumbUrl)
         ]);
         audioBlob = audio;
         thumbBlob = thumb;
         thumbHighResBlob = thumbHigh;
       } else {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://chrismusic-production.up.railway.app";
-        const [audio, thumb, thumbHigh] = await Promise.all([
-          this.fetchNativeBlob(`${apiUrl}/proxy?id=${song.id}`),
-          this.fetchNativeBlob(hqThumbUrl).catch(() => undefined),
-          this.fetchNativeBlob(maxResThumbUrl).catch(() => undefined)
-        ]);
-        audioBlob = audio;
-        thumbBlob = thumb;
-        thumbHighResBlob = thumbHigh;
+        throw new Error('Descarga no soportada en este entorno sin motor nativo');
       }
+      
+      downloadStore.updateProgress(song.id, 80);
 
       const last = await db.offlineSongs.orderBy('orderIndex').last();
       const nextIndex = (last?.orderIndex ?? 0) + 1;
@@ -286,10 +298,19 @@ export class OfflineService {
       } catch (e) {
         console.warn('[OfflineService] Failed to fetch lyrics during download:', e);
       }
-    } catch (error) {
+      
+      downloadStore.setCompleted(song.id);
+    } catch (error: any) {
       console.error('[OfflineService] Download error:', error);
+      downloadStore.setError(song.id, error.message || 'Error al descargar');
       throw error;
     }
+  }
+
+  async retryDownloadSong(song: Song): Promise<void> {
+    const downloadStore = useDownloadStore.getState();
+    downloadStore.retryDownload(song.id);
+    return this.downloadSong(song);
   }
 
   async updateOfflineOrder(songIds: string[]): Promise<void> {
@@ -301,6 +322,32 @@ export class OfflineService {
   }
 
   async removeDownload(songId: string): Promise<void> {
+    try {
+      const record = await db.offlineSongs.get(songId);
+      if (record) {
+        const { Filesystem, Directory } = await import('@capacitor/filesystem');
+        const isAndroid = YouTubeExtractionService.isAndroid();
+        
+        const deleteSafe = async (path?: string) => {
+          if (!path || !isAndroid) return;
+          try {
+            const fileName = path.split('/').pop();
+            if (fileName) {
+              await Filesystem.deleteFile({ path: fileName, directory: Directory.Cache });
+              console.log('[OfflineService] Deleted physical file:', fileName);
+            }
+          } catch (e) { /* ignore if not found */ }
+        };
+
+        await Promise.all([
+          deleteSafe(record.filePath),
+          deleteSafe(record.thumbnailFilePath),
+          deleteSafe(record.thumbnailHighResFilePath)
+        ]);
+      }
+    } catch (e) {
+      console.error('[OfflineService] removeDownload cleanup failed:', e);
+    }
     await db.offlineSongs.delete(songId);
   }
 
@@ -407,6 +454,26 @@ export class OfflineService {
 
       for (const entry of oldestEntries) {
         console.log(`[OfflineService] Cleaning up old cache entry: ${entry.song.title}`);
+        
+        // Physical cleanup
+        if (YouTubeExtractionService.isAndroid()) {
+          try {
+            const { Filesystem, Directory } = await import('@capacitor/filesystem');
+            const deleteSafe = async (path?: string) => {
+              if (!path) return;
+              try {
+                const fileName = path.split('/').pop();
+                if (fileName) await Filesystem.deleteFile({ path: fileName, directory: Directory.Cache });
+              } catch (e) { /* ignore */ }
+            };
+            await Promise.all([
+              deleteSafe(entry.filePath),
+              deleteSafe(entry.thumbnailFilePath),
+              deleteSafe(entry.thumbnailHighResFilePath)
+            ]);
+          } catch (e) { /* ignore filesystem import errors */ }
+        }
+
         await db.cachedSongs.delete(entry.id);
       }
     } catch (e) {
@@ -489,9 +556,11 @@ export class OfflineService {
         if (existingPath && isAndroid) {
           try {
             const fileName = existingPath.split('/').pop() || '';
-            await Filesystem.stat({ path: fileName, directory: Directory.Cache });
-            if (!existingPath.endsWith('.aac')) return existingPath;
-          } catch (e) { /* missing or corrupted */ }
+            const stats = await Filesystem.stat({ path: fileName, directory: Directory.Cache });
+            if (stats.size > 0 && !existingPath.endsWith('.aac')) return existingPath;
+          } catch (e) { 
+            console.log('[OfflineService] Local thumbnail missing from cache, will regenerate or fallback:', existingPath);
+          }
         }
 
         if (blob) {

@@ -187,6 +187,7 @@ export class YouTubeExtractionService {
       return fallbackUrl;
     }
     if (!songId) return fallbackUrl || '';
+    // Use maxresdefault for the player to ensure maximum resolution (1280x720)
     return `https://i.ytimg.com/vi/${songId}/maxresdefault.jpg`;
   }
 
@@ -195,7 +196,19 @@ export class YouTubeExtractionService {
     if (fallbackUrl && (fallbackUrl.includes('_capacitor_file_') || fallbackUrl.startsWith('http://localhost') || fallbackUrl.startsWith('https://localhost') || fallbackUrl.startsWith('blob:') || fallbackUrl.startsWith('file:') || fallbackUrl.startsWith('capacitor:'))) {
       return fallbackUrl;
     }
+
+    // For lists/mini-player, use square YT Music art upscaled to 544x544 if available
+    if (fallbackUrl && (fallbackUrl.includes('googleusercontent.com') || fallbackUrl.includes('ggpht.com'))) {
+      return fallbackUrl.replace(/-w\d+-h\d+/, '-w544-h544').replace(/=w\d+-h\d+/, '=w544-h544');
+    }
+
     if (!songId) return fallbackUrl || '';
+
+    // If it's already a square thumbnail from search, keep it to avoid borders
+    if (fallbackUrl && !fallbackUrl.includes('ytimg.com/vi/')) {
+      return fallbackUrl;
+    }
+
     return `https://i.ytimg.com/vi/${songId}/hqdefault.jpg`;
   }
 
@@ -358,18 +371,6 @@ export class YouTubeExtractionService {
         if (url) return url as string;
       } catch (e) {
         console.error('[YouTubeExtractionService] Tauri native extraction failed:', e);
-      }
-    }
-
-    // Strategy 3: Railway Proxy (Web Fallback) - ONLY if NOT Native
-    if (!isNative) {
-      try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://chrismusic-production.up.railway.app";
-        const response = await fetch(`${apiUrl}/stream?id=${videoId}`);
-        const data = await response.json();
-        if (data.url) return data.url;
-      } catch (e) {
-        console.error('[YouTubeExtractionService] Railway fallback failed:', e);
       }
     }
 

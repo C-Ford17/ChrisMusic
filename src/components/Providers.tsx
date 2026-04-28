@@ -7,6 +7,7 @@ import { BottomNav } from "@/shared/components/BottomNav";
 import { YouTubePlayer } from "@/features/player/components/YouTubePlayer";
 import { OfflineDetector } from "@/components/OfflineDetector";
 import { UpdaterComponent } from "@/components/UpdaterComponent";
+import { DownloadBubble } from "@/features/library/components/DownloadBubble";
 
 import { usePlayerStore, initPlayerStoreSync, initializePlayerSession } from "@/features/player/store/playerStore";
 import { useEffect } from "react";
@@ -56,6 +57,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       </main>
       <BottomNav />
       <PlayerOverlay />
+      <DownloadBubble />
     </ThemeProvider>
   );
 }

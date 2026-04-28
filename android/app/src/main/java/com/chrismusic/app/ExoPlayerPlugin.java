@@ -28,6 +28,9 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 @CapacitorPlugin(
     name = "ExoPlayer",
@@ -248,9 +251,113 @@ public class ExoPlayerPlugin extends Plugin {
                         .setMediaMetadata(metadata)
                         .build();
 
-                // Add to the end of currently playing items
-                player.addMediaItem(mediaItem);
-                Log.d(TAG, "[ExoPlayerPlugin] Native Next Item added: " + title);
+                // Check if already in queue to avoid duplicates
+                boolean exists = false;
+                for (int i = 0; i < player.getMediaItemCount(); i++) {
+                    if (id.equals(player.getMediaItemAt(i).mediaId)) {
+                        exists = true;
+                        break;
+                    }
+                }
+
+                if (!exists) {
+                    player.addMediaItem(mediaItem);
+                    Log.d(TAG, "[ExoPlayerPlugin] Native Next Item added: " + title);
+                }
+                call.resolve();
+            } catch (Exception e) {
+                call.reject(e.getMessage());
+            }
+        });
+    }
+
+    @PluginMethod
+    public void setPlaylist(PluginCall call) {
+        com.getcapacitor.JSArray itemsArr = call.getArray("items");
+        if (itemsArr == null) {
+            call.reject("items array is required");
+            return;
+        }
+
+        new Handler(Looper.getMainLooper()).post(() -> {
+            try {
+                Player player = getOrStartPlayer();
+                if (player == null) return;
+
+                java.util.List<MediaItem> mediaItems = new java.util.ArrayList<>();
+                for (int i = 0; i < itemsArr.length(); i++) {
+                    try {
+                        JSONObject item = itemsArr.getJSONObject(i);
+                        String url = item.optString("url");
+                        String id = item.optString("id");
+                        String title = item.optString("title", "");
+                        String artist = item.optString("artist", "");
+                        String artwork = item.optString("artwork", "");
+
+                        if (url == null || url.isEmpty()) continue;
+
+                        MediaMetadata metadata = new MediaMetadata.Builder()
+                                .setTitle(title)
+                                .setArtist(artist)
+                                .setArtworkUri(artwork != null && !artwork.isEmpty() ? android.net.Uri.parse(artwork) : null)
+                                .build();
+
+                        mediaItems.add(new MediaItem.Builder()
+                                .setMediaId(id)
+                                .setUri(url)
+                                .setMediaMetadata(metadata)
+                                .build());
+                    } catch (JSONException e) {
+                        Log.e(TAG, "Error parsing playlist item at index " + i, e);
+                    }
+                }
+
+                if (!mediaItems.isEmpty()) {
+                    // Smart update: check if current item is in the new list
+                    MediaItem current = player.getCurrentMediaItem();
+                    int newPosOfCurrent = -1;
+                    if (current != null) {
+                        for (int i = 0; i < mediaItems.size(); i++) {
+                            if (mediaItems.get(i).mediaId.equals(current.mediaId)) {
+                                newPosOfCurrent = i;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (newPosOfCurrent != -1) {
+                        // Current song is in the new list. 
+                        // To avoid flickering, we don't clear. We just add items that aren't there.
+                        // And we ensure items after the current one match the new list.
+                        
+                        // 1. Remove all items AFTER the current one to rebuild the "Next" queue
+                        int currentIdxInPlayer = player.getCurrentMediaItemIndex();
+                        if (player.getMediaItemCount() > currentIdxInPlayer + 1) {
+                            player.removeMediaItems(currentIdxInPlayer + 1, player.getMediaItemCount());
+                        }
+                        
+                        // 2. Add the items that should follow
+                        java.util.List<MediaItem> toAdd = mediaItems.subList(newPosOfCurrent + 1, mediaItems.size());
+                        if (!toAdd.isEmpty()) {
+                            player.addMediaItems(toAdd);
+                        }
+                        
+                        // 3. (Optional) Handle items BEFORE current if we want native "Previous" to work
+                        if (newPosOfCurrent > 0) {
+                             // Rebuild the "Previous" list
+                             if (currentIdxInPlayer > 0) {
+                                 player.removeMediaItems(0, currentIdxInPlayer);
+                             }
+                             java.util.List<MediaItem> toAddBefore = mediaItems.subList(0, newPosOfCurrent);
+                             player.addMediaItems(0, toAddBefore);
+                        }
+                        
+                    } else {
+                        // Current song not in new list, or no song playing. Safe to replace.
+                        player.setMediaItems(mediaItems);
+                        player.prepare();
+                    }
+                }
                 call.resolve();
             } catch (Exception e) {
                 call.reject(e.getMessage());

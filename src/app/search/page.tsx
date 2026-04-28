@@ -170,11 +170,13 @@ export function SearchContent() {
       }
     }
 
-    // Update URL for normal search
-    const params = new URLSearchParams();
-    params.set('q', searchTerm.trim());
-    params.set('tab', targetTab);
-    router.replace(`/search?${params.toString()}`);
+    // Update URL for normal search only on initial search
+    if (!isAppend) {
+      const params = new URLSearchParams();
+      params.set('q', searchTerm.trim());
+      params.set('tab', targetTab);
+      router.replace(`/search?${params.toString()}`);
+    }
 
     try {
       const tokenToUse = isAppend ? continuationToken : undefined;

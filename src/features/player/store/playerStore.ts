@@ -5,7 +5,7 @@ import { LibraryService } from '@/features/library/services/libraryService';
 import { lyricsService, type LyricsLine, type LyricsData } from '@/features/lyrics/services/lrclibService';
 import { offlineService } from '@/features/library/services/offlineService';
 import { audioEngine } from '@/features/player/services/audioEngine';
-import { youtubeExtractionService, YouTubeExtractionService } from '@/features/player/services/youtubeExtractionService';
+import { youtubeExtractionService, YouTubeExtractionService, ExoPlayerNative } from '@/features/player/services/youtubeExtractionService';
 import { db } from '@/core/db/db';
 import { toast } from 'sonner';
 
@@ -63,6 +63,7 @@ interface PlayerState {
   setIsSearchingLyrics: (isSearching: boolean) => void;
   setIsBuffering: (isBuffering: boolean) => void;
   prefetchNext: () => Promise<void>;
+  syncQueueToNative: () => Promise<void>;
   setAudioSource: (source: 'youtube' | 'cache' | 'download' | null) => void;
   setQueue: (queue: Song[]) => void;
   clearPlayerState: () => void;
@@ -143,27 +144,44 @@ export const usePlayerStore = create<PlayerState>()(
 
         // Add all to downloading status immediately so UI updates
         const newDownloading = new Set(get().downloadingSongs);
-        toDownload.forEach(s => newDownloading.add(s.id));
+        const downloadStore = (await import('@/features/library/store/downloadStore')).useDownloadStore.getState();
+        
+        toDownload.forEach(s => {
+          newDownloading.add(s.id);
+          downloadStore.addDownload(s);
+        });
         set({ downloadingSongs: newDownloading });
 
         // Background download loop
+        // Parallel download with concurrency limit (2 at a time)
+        const concurrencyLimit = 2;
         let successCount = 0;
-        for (const song of toDownload) {
-          try {
-            await offlineService.downloadSong(song);
-            successCount++;
-          } catch (error) {
-            console.error(error);
-            toast.error(`Error al descargar: ${song.title}`);
-          } finally {
-            // Remove from downloading status one by one as they finish
-            setTimeout(() => {
-              const nextSet = new Set(get().downloadingSongs);
-              nextSet.delete(song.id);
-              set({ downloadingSongs: nextSet });
-            }, 100);
+        const pool = [...toDownload];
+        
+        const worker = async () => {
+          while (pool.length > 0) {
+            const song = pool.shift();
+            if (!song) break;
+            
+            try {
+              await offlineService.downloadSong(song);
+              successCount++;
+            } catch (error) {
+              console.error(error);
+              toast.error(`Error al descargar: ${song.title}`);
+            } finally {
+              // Remove from downloading status one by one as they finish
+              setTimeout(() => {
+                const nextSet = new Set(get().downloadingSongs);
+                nextSet.delete(song.id);
+                set({ downloadingSongs: nextSet });
+              }, 100);
+            }
           }
-        }
+        };
+
+        // Start initial workers
+        await Promise.all(Array(Math.min(concurrencyLimit, toDownload.length)).fill(null).map(worker));
         
         if (successCount > 0) {
           toast.success(`Se descargaron ${successCount} canciones correctamente`);
@@ -254,6 +272,7 @@ export const usePlayerStore = create<PlayerState>()(
           set({ currentSong: resolvedSong }); // Update with local thumbnail
           await audioEngine.loadSong(resolvedSong, startSeconds, true, audioUrl);
           get().prefetchNext();
+          get().syncQueueToNative();
           return;
         }
 
@@ -263,8 +282,13 @@ export const usePlayerStore = create<PlayerState>()(
         }
 
         try {
+          // Ensure we have the high-res thumbnail for the player even while streaming
+          const highResUrl = YouTubeExtractionService.getHighResThumbnail(song.id, song.thumbnailUrl);
+          const updatedSong = { ...song, thumbnailHighResUrl: highResUrl };
+          set({ currentSong: updatedSong });
+
           // 3. Extraction + Streaming
-          await audioEngine.loadSong(song, startSeconds, get().isPlaying);
+          await audioEngine.loadSong(updatedSong, startSeconds, get().isPlaying);
           
           // Background: Cache this song for future plays
           offlineService.cacheSong(song);
@@ -319,6 +343,7 @@ export const usePlayerStore = create<PlayerState>()(
           set({ currentSong: resolvedSong }); // Update with local thumbnail
           await audioEngine.loadSong(resolvedSong, startSeconds, true, audioUrl);
           get().prefetchNext();
+          get().syncQueueToNative();
           return;
         }
 
@@ -328,8 +353,13 @@ export const usePlayerStore = create<PlayerState>()(
         }
 
         try {
-          // 3. Extraction + Streaming
-          await audioEngine.loadSong(song, startSeconds, get().isPlaying);
+          // Ensure we have the high-res thumbnail for the player even while streaming
+          const highResUrl = YouTubeExtractionService.getHighResThumbnail(song.id, song.thumbnailUrl);
+          const updatedSong = { ...song, thumbnailHighResUrl: highResUrl };
+          set({ currentSong: updatedSong });
+
+          // 1. Extraction + Streaming
+          await audioEngine.loadSong(updatedSong, startSeconds, get().isPlaying);
           
           // Background: Cache this song
           offlineService.cacheSong(song);
@@ -434,6 +464,7 @@ export const usePlayerStore = create<PlayerState>()(
         if (nextIndex !== -1) {
           const nextSong = queue[nextIndex];
           get().playSongInQueue(nextSong, queue);
+          get().syncQueueToNative();
         }
       },
 
@@ -467,6 +498,7 @@ export const usePlayerStore = create<PlayerState>()(
         if (prevIndex !== -1) {
           const prevSong = queue[prevIndex];
           get().playSongInQueue(prevSong, queue);
+          get().syncQueueToNative();
         } else {
           get().seekTo(0);
         }
@@ -549,31 +581,89 @@ export const usePlayerStore = create<PlayerState>()(
         if (!currentSong || queue.length === 0) return;
 
         const currentIndex = queue.findIndex(s => s.id === currentSong.id);
-        if (currentIndex === -1 || currentIndex === queue.length - 1) return;
+        if (currentIndex === -1) return;
 
-        const nextSong = queue[currentIndex + 1];
-        if (prefetchingId === nextSong.id) return; // Already prefetching
-
-        // Handle Offline/Cache resolution for prefetching
-        const { song: resolvedNext, audioUrl } = await offlineService.resolveOfflineSong(nextSong);
+        // Prefetch up to 2 tracks ahead to ensure native queue is always filled
+        const tracksToPrefetch = queue.slice(currentIndex + 1, currentIndex + 3);
         
-        if (audioUrl) {
-          console.log('[PlayerStore] Prefetch: Song is offline, registering native next track');
-          await audioEngine.addNextTrack(resolvedNext, audioUrl);
-          return;
+        for (const nextSong of tracksToPrefetch) {
+          if (prefetchingId === nextSong.id) continue;
+
+          // Handle Offline/Cache resolution for prefetching
+          const { song: resolvedNext, audioUrl } = await offlineService.resolveOfflineSong(nextSong);
+          
+          if (audioUrl) {
+            console.log('[PlayerStore] Prefetch: Song is offline, registering native next track:', resolvedNext.title);
+            await audioEngine.addNextTrack(resolvedNext, audioUrl);
+            continue;
+          }
+
+          set({ prefetchingId: nextSong.id });
+          try {
+            const url = await youtubeExtractionService.getStreamUrl(nextSong.id);
+            if (url) {
+              console.log('[PlayerStore] Prefetch: Extracted URL, registering native next track:', nextSong.title);
+              await audioEngine.addNextTrack(nextSong, url);
+            }
+          } catch (e) {
+            console.warn('[PlayerStore] Prefetch failed:', e);
+          } finally {
+            set({ prefetchingId: null });
+          }
+        }
+      },
+
+      syncQueueToNative: async () => {
+        if (!YouTubeExtractionService.isAndroid()) return;
+        const { queue, currentSong, repeatMode } = get();
+        if (!currentSong || queue.length === 0) return;
+
+        const currentIndex = queue.findIndex(s => s.id === currentSong.id);
+        if (currentIndex === -1) return;
+
+        // Take a window of songs around the current one
+        const windowSizePrev = 5;
+        const windowSizeNext = 15;
+        
+        let targetIndices: number[] = [];
+        
+        // 1. Current song MUST be included and we'll track its position
+        targetIndices.push(currentIndex);
+        
+        // 2. Next songs
+        for (let i = 1; i <= windowSizeNext; i++) {
+          const nextIdx = (currentIndex + i) % queue.length;
+          if (!targetIndices.includes(nextIdx) && (repeatMode === 'all' || nextIdx > currentIndex)) {
+            targetIndices.push(nextIdx);
+          }
+        }
+        
+        // 3. Previous songs
+        for (let i = 1; i <= windowSizePrev; i++) {
+          const prevIdx = (currentIndex - i + queue.length) % queue.length;
+          if (!targetIndices.includes(prevIdx) && (repeatMode === 'all' || prevIdx < currentIndex)) {
+            targetIndices.unshift(prevIdx); // Add to beginning to keep order
+          }
         }
 
-        set({ prefetchingId: nextSong.id });
-        try {
-          const url = await youtubeExtractionService.getStreamUrl(nextSong.id);
-          if (url) {
-            console.log('[PlayerStore] Prefetch: Extracted URL, registering native next track');
-            await audioEngine.addNextTrack(nextSong, url);
+        const readyItems: any[] = [];
+        for (const idx of targetIndices) {
+          const song = queue[idx];
+          const { audioUrl } = await offlineService.resolveOfflineSong(song);
+          if (audioUrl) {
+            readyItems.push({
+              id: song.id,
+              url: audioUrl,
+              title: song.title,
+              artist: song.artistName,
+              artwork: song.thumbnailHighResUrl || YouTubeExtractionService.getFallbackThumbnail(song.id, song.thumbnailUrl)
+            });
           }
-        } catch (e) {
-          console.warn('[PlayerStore] Prefetch failed:', e);
-        } finally {
-          set({ prefetchingId: null });
+        }
+
+        if (readyItems.length > 0) {
+          console.log(`[PlayerStore] Syncing ${readyItems.length} tracks to native playlist (including wrap-around)`);
+          await audioEngine.setPlaylist(readyItems);
         }
       },
 
@@ -673,6 +763,8 @@ export const initPlayerStoreSync = () => {
         
         // Prepare NEXT one for native playlist
         usePlayerStore.getState().prefetchNext();
+        // Keep native playlist synced after transition
+        usePlayerStore.getState().syncQueueToNative();
       }
     }
   });
@@ -715,16 +807,34 @@ export const initPlayerStoreSync = () => {
 export const initializePlayerSession = async () => {
   const state = usePlayerStore.getState();
   if (state.currentSong && state.progress > 0) {
+    // Android Check: If already playing natively, DON'T reload (prevents re-entry lag/glitch)
+    if (YouTubeExtractionService.isAndroid()) {
+      const isNativePlaying = await audioEngine.isPlayingNative();
+      const nativeState = await ExoPlayerNative.getPlaybackState();
+      
+      if (isNativePlaying || (nativeState.mediaId === state.currentSong.id)) {
+        console.log('[PlayerStore] Native engine already has this song. Syncing instead of reloading.');
+        await audioEngine.syncWithNative();
+        return;
+      }
+    }
+
     console.log('[PlayerStore] Initializing session, loading song (paused):', state.currentSong.title);
     
     // Try offline first, then cache, then YouTube
     const { song: resolvedSong, audioUrl } = await offlineService.resolveOfflineSong(state.currentSong);
     
+    // Sync resolved metadata back to state (fixes broken thumbnails if downloads were deleted)
+    if (resolvedSong.thumbnailUrl !== state.currentSong.thumbnailUrl) {
+      state.setQueue(state.queue.map(s => s.id === resolvedSong.id ? resolvedSong : s));
+      usePlayerStore.setState({ currentSong: resolvedSong });
+    }
+
     if (audioUrl) {
       console.log('[PlayerStore] Source: Offline/Cache');
       await audioEngine.loadSong(resolvedSong, state.progress, false, audioUrl);
     } else {
-      await audioEngine.loadSong(state.currentSong, state.progress, false);
+      await audioEngine.loadSong(resolvedSong, state.progress, false);
     }
   }
 };

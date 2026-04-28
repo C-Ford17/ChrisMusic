@@ -127,14 +127,24 @@ public class MusicPlayerService extends MediaSessionService {
 
                 @Override
                 public void seekToNext() {
-                    Log.d(TAG, "seekToNext triggered from notification");
-                    ExoPlayerPlugin.onNativeNext();
+                    Log.d(TAG, "seekToNext triggered from notification. Attempting native skip...");
+                    if (baseExoPlayer.hasNextMediaItem()) {
+                        super.seekToNext();
+                    } else {
+                        // Fallback to JS if no native next item
+                        ExoPlayerPlugin.onNativeNext();
+                    }
                 }
 
                 @Override
                 public void seekToPrevious() {
-                    Log.d(TAG, "seekToPrevious triggered from notification");
-                    ExoPlayerPlugin.onNativePrevious();
+                    Log.d(TAG, "seekToPrevious triggered from notification. Attempting native skip...");
+                    if (baseExoPlayer.hasPreviousMediaItem()) {
+                        super.seekToPrevious();
+                    } else {
+                        // Fallback to JS if no native previous item
+                        ExoPlayerPlugin.onNativePrevious();
+                    }
                 }
             };
 

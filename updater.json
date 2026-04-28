@@ -1,17 +1,17 @@
 {
-  "version": "1.0.14",
+  "version": "1.1.0",
   "notes": "v1.0.14: Carátulas en alta resolución offline, mantenimiento automático de letras y optimización de biblioteca.",
   "pub_date": "2026-04-27T16:59:26Z",
   "platforms": {
     "windows-x86_64": {
       "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUR3B1OFN2ZzZwSzlSWUN6RlJSTVVKU3IrT0k0NStIZ29XVjRTMVN2Mk91eWRXcWwzamkzSDM5SnRLMnBDTWY5UHF1N2dDdGdwQ1pyQVlkaVVwNVpEamdCS2p2UUdqOEFBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc3MzA5MTY0CWZpbGU6Q2hyaXNNdXNpY18xLjAuMTRfeDY0LXNldHVwLmV4ZQo3SjZPSDJ3RXNLNlpvNnVrb2E4YUx4ZFhJMTZ3bzFRczNqMUFtRTBvOHlReGJ3a3F5RmphcDVtR0pwYkkyc3ZEZnhLTmQvRDNra2lhaDdUZVlTd1NCUT09Cg==",
-      "url": "https://github.com/C-Ford17/ChrisMusic/releases/download/tauri-1.0.14/ChrisMusic_1.0.14_x64-setup.exe"
+      "url": "https://github.com/C-Ford17/ChrisMusic/releases/download/tauri-1.1.0/ChrisMusic_1.1.0_x64-setup.exe"
     }
   },
   "android": {
-    "version": "1.0.7",
-    "url": "https://github.com/C-Ford17/ChrisMusic/releases/download/native-1.0.7/app-release.apk",
-    "web_version": "1.0.14",
-    "web_url": "https://github.com/C-Ford17/ChrisMusic/releases/download/1.0.14/dist.zip"
+    "version": "1.1.0",
+    "url": "https://github.com/C-Ford17/ChrisMusic/releases/download/native-1.1.0/app-release.apk",
+    "web_version": "1.1.0",
+    "web_url": "https://github.com/C-Ford17/ChrisMusic/releases/download/1.1.0/dist.zip"
   }
 }

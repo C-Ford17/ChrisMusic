@@ -37,6 +37,7 @@ export default function LibraryPage() {
   }, []) || [];
   const followedArtists = useLiveQuery(() => db.followedArtists.orderBy('followedAt').reverse().toArray(), []) || [];
   const savedAlbums = useLiveQuery(() => db.savedAlbums.orderBy('savedAt').reverse().toArray(), []) || [];
+  const playlistEntries = useLiveQuery(() => db.playlistEntries.toArray(), []) || [];
 
   const handleReorderFavorites = async (newOrder: any[]) => {
     await LibraryService.updateFavoritesOrder(newOrder.map(f => f.id));
@@ -161,34 +162,47 @@ export default function LibraryPage() {
             <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-all" />
             <Heart size={40} className="absolute top-6 right-6 opacity-30 text-white group-hover:scale-125 transition-transform" fill="currentColor" />
             <h3 className="font-black relative z-10 text-xl text-white tracking-tighter">Me Gusta</h3>
-            <p className="text-white/60 text-xs font-bold relative z-10 mt-1 uppercase tracking-widest">{favorites.length} Pistas</p>
+            <div className="flex items-center gap-1.5 text-white/60 relative z-10 mt-1">
+              <Music size={12} />
+              <p className="text-[10px] font-black uppercase tracking-widest">{favorites.length}</p>
+            </div>
           </div>
 
           {/* User Playlists */}
-          {filteredPlaylists.map((playlist) => (
-            <Link href={`/library/playlist?id=${playlist.id}`} key={playlist.id}>
-              <div className="aspect-square bg-black/[0.02] dark:bg-white/5 rounded-3xl p-6 flex flex-col justify-end cursor-pointer hover:bg-white dark:hover:bg-white/10 transition-all relative overflow-hidden group border border-black/5 dark:border-white/10 hover:border-[var(--accent-primary)]/30 shadow-sm hover:shadow-2xl">
-                <Music size={40} className="absolute top-6 right-6 opacity-[0.05] dark:opacity-20 text-black dark:text-white group-hover:scale-110 group-hover:text-[var(--accent-primary)] group-hover:opacity-40 transition-all" />
-                <h3 className="font-black relative z-10 text-lg text-black dark:text-white truncate tracking-tighter">{playlist.name}</h3>
-                <p className="text-black/30 dark:text-white/40 text-[10px] font-black relative z-10 mt-1 uppercase tracking-widest">Playlist</p>
-              </div>
-            </Link>
-          ))}
+          {filteredPlaylists.map((playlist) => {
+            const count = playlistEntries.filter(e => e.playlistId === playlist.id).length;
+            return (
+              <Link href={`/library/playlist?id=${playlist.id}`} key={playlist.id}>
+                <div className="aspect-square bg-black/[0.02] dark:bg-white/5 rounded-3xl p-6 flex flex-col justify-end cursor-pointer hover:bg-white dark:hover:bg-white/10 transition-all relative overflow-hidden group border border-black/5 dark:border-white/10 hover:border-[var(--accent-primary)]/30 shadow-sm hover:shadow-2xl">
+                  <Music size={40} className="absolute top-6 right-6 opacity-[0.05] dark:opacity-20 text-black dark:text-white group-hover:scale-110 group-hover:text-[var(--accent-primary)] group-hover:opacity-40 transition-all" />
+                  <h3 className="font-black relative z-10 text-lg text-black dark:text-white truncate tracking-tighter">{playlist.name}</h3>
+                  <div className="flex items-center gap-1.5 text-black/30 dark:text-white/40 relative z-10 mt-1">
+                    <Music size={10} />
+                    <p className="text-[10px] font-black uppercase tracking-widest">{count}</p>
+                  </div>
+                </div>
+              </Link>
+            );
+          })}
         </div>
       )}
 
       {activeTab === 'favorites' && (
         <div className="flex flex-col gap-3">
-          {favorites.length > 0 && (
-            <div className="flex justify-end mb-2">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2 bg-black/5 dark:bg-white/5 px-4 py-2 rounded-2xl">
+               <Music size={14} className="text-[var(--accent-primary)]" />
+               <span className="text-xs font-black text-black/60 dark:text-white/60 uppercase tracking-widest">{favorites.length} Pistas</span>
+            </div>
+            {favorites.length > 0 && (
               <button 
                 onClick={() => downloadMultiple(favorites.map(f => f.song as Song))}
                 className="flex items-center gap-2 px-4 py-2 bg-black/5 dark:bg-white/5 text-black dark:text-white hover:bg-[var(--accent-primary)] hover:text-white rounded-full text-xs font-bold uppercase tracking-wider transition-all"
               >
                 <Download size={16} /> Descargar Todas
               </button>
-            </div>
-          )}
+            )}
+          </div>
           {favorites.length === 0 ? (
             <div className="flex flex-col items-center justify-center text-center py-32 opacity-20">
               <Heart size={80} className="mb-6" />
@@ -209,6 +223,12 @@ export default function LibraryPage() {
 
       {activeTab === 'offline' && (
         <div className="flex flex-col gap-3">
+          <div className="flex items-center mb-4">
+            <div className="flex items-center gap-2 bg-black/5 dark:bg-white/5 px-4 py-2 rounded-2xl">
+               <Music size={14} className="text-[var(--accent-primary)]" />
+               <span className="text-xs font-black text-black/60 dark:text-white/60 uppercase tracking-widest">{offlineSongs.length} Pistas</span>
+            </div>
+          </div>
           {offlineSongs.length === 0 ? (
             <div className="flex flex-col items-center justify-center text-center py-32 opacity-20">
               <Download size={80} className="mb-6" />
