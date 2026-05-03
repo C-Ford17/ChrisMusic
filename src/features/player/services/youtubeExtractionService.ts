@@ -3,9 +3,9 @@ import { type Song, type Artist, type Album, type SearchResult as MusicSearchRes
 
 interface YouTubeNativePlugin {
   init(): Promise<{ status: string; ffmpeg: string; ffmpegPath: string }>;
-  getStreamUrl(options: { videoId: string }): Promise<{ url: string }>;
-  search(options: { query: string; count?: number }): Promise<{ results: any[] }>;
-  downloadToAdts(options: { videoId: string }): Promise<{ base64: string; format: string }>;
+  getStreamUrl(options: { videoId: string; quality?: string; proxy?: string; doh?: string; ipv4?: boolean }): Promise<{ url: string }>;
+  search(options: { query: string; count?: number; proxy?: string; doh?: string; ipv4?: boolean }): Promise<{ results: any[] }>;
+  downloadToAdts(options: { videoId: string; quality?: string; proxy?: string; doh?: string; ipv4?: boolean }): Promise<{ base64: string; format: string }>;
   updateYoutubeDL(): Promise<void>;
   getDiagnostics(): Promise<any>;
   forceReextraction(): Promise<void>;
@@ -264,6 +264,42 @@ export class YouTubeExtractionService {
   }
 
   /**
+   * Internal helper to get network/quality options from the store.
+   */
+  private getOptions() {
+    const { useSettingsStore } = require('@/features/settings/store/settingsStore');
+    const state = useSettingsStore.getState();
+    
+    let dohUrl = '';
+    if (state.dohProvider !== 'none') {
+      const providers: Record<string, string> = {
+        google: 'https://8.8.8.8/dns-query',
+        cloudflare: 'https://1.1.1.1/dns-query',
+        opendns: 'https://doh.opendns.com/dns-query',
+        adguard: 'https://dns.adguard.com/dns-query',
+        custom: state.customDohUrl
+      };
+      dohUrl = providers[state.dohProvider] || '';
+    }
+
+    let proxy = null;
+    if (state.enableProxy) {
+      if (state.proxyHost && state.proxyPort) {
+        proxy = `${state.proxyType}://${state.proxyHost}:${state.proxyPort}`;
+      } else if (state.proxyUrl) {
+        proxy = state.proxyUrl;
+      }
+    }
+
+    return {
+      quality: state.audioQuality,
+      proxy,
+      doh: dohUrl,
+      ipv4: state.forceIPv4
+    };
+  }
+
+  /**
    * Native ADTS Transcoding (Android only)
    */
   async downloadToAdts(videoId: string): Promise<{ base64: string; format: string }> {
@@ -271,7 +307,8 @@ export class YouTubeExtractionService {
     if (!YouTubeExtractionService.isAndroid()) {
       throw new Error('Native ADTS transcoding is only available on Android');
     }
-    return await YouTubeNative.downloadToAdts({ videoId });
+    const { quality, proxy, doh } = this.getOptions();
+    return await YouTubeNative.downloadToAdts({ videoId, quality, proxy, doh });
   }
 
   /**
@@ -350,13 +387,14 @@ export class YouTubeExtractionService {
   async getStreamUrl(videoId: string): Promise<string> {
     await this.ensureInitialized();
     const isNative = YouTubeExtractionService.isAndroid() || YouTubeExtractionService.isTauri();
+    const { quality, proxy, doh, ipv4 } = this.getOptions();
 
-    console.log(`[YouTubeExtractionService] Fetching stream for ${videoId}. Env: ${YouTubeExtractionService.getEnv()}`);
+    console.log(`[YouTubeExtractionService] Fetching stream for ${videoId}. Quality: ${quality}, Env: ${YouTubeExtractionService.getEnv()}`);
 
     // Strategy 1: Native yt-dlp (Android)
     if (YouTubeExtractionService.isAndroid()) {
       try {
-        const result = await YouTubeNative.getStreamUrl({ videoId });
+        const result = await YouTubeNative.getStreamUrl({ videoId, quality, proxy, doh, ipv4 });
         if (result.url) return result.url;
       } catch (e) {
         console.error('[YouTubeExtractionService] Android native extraction failed:', e);
@@ -367,7 +405,8 @@ export class YouTubeExtractionService {
     if (YouTubeExtractionService.isTauri()) {
       try {
         const { invoke } = await import('@tauri-apps/api/core');
-        const url = await invoke('get_streaming_url', { videoId });
+        // On PC, quality choice might need extra args for the rust extractor too
+        const url = await invoke('get_streaming_url', { videoId, quality, proxy, doh, ipv4 });
         if (url) return url as string;
       } catch (e) {
         console.error('[YouTubeExtractionService] Tauri native extraction failed:', e);
@@ -378,11 +417,13 @@ export class YouTubeExtractionService {
   }
 
   async searchWithType(query: string, filter: 'song' | 'artist' | 'album' | 'playlist', count: number = 20, continuation?: string): Promise<{ results: MusicSearchResult[], continuation?: string }> {
+    const { proxy, doh, ipv4 } = this.getOptions();
+    
     // ── Tauri (Desktop) ──────────────────────────────────────────────────────
     if (YouTubeExtractionService.isTauri()) {
       try {
         const { invoke } = await import('@tauri-apps/api/core');
-        const response: any = await invoke('search_youtube_native_cmd', { query, count, filter, continuation });
+        const response: any = await invoke('search_youtube_native_cmd', { query, count, filter, continuation, proxy, doh, ipv4 });
         return {
           results: response.results.map((item: any) => ({ ...item, sourceType: 'youtube' })),
           continuation: response.continuation
@@ -391,6 +432,18 @@ export class YouTubeExtractionService {
         console.error('Tauri SearchWithType Error:', error);
         return { results: [] };
       }
+    }
+
+    // ── Android — Native yt-dlp search if filter is song ───────────────────
+    if (YouTubeExtractionService.isAndroid() && filter === 'song' && !continuation) {
+       try {
+         const res = await YouTubeNative.search({ query, count, proxy, doh });
+         if (res.results && res.results.length > 0) {
+           return { results: res.results };
+         }
+       } catch (err) {
+         console.warn('[YouTubeExtractionService] Native search failed, falling back to InnerTube', err);
+       }
     }
 
     // ── Android / Web — InnerTube direct ─────────────────────────────────────
@@ -570,10 +623,11 @@ export class YouTubeExtractionService {
 
 
   async getArtistDetails(id: string): Promise<Artist | null> {
+    const { proxy, doh, ipv4 } = this.getOptions();
     if (YouTubeExtractionService.isTauri()) {
       try {
         const { invoke } = await import('@tauri-apps/api/core');
-        return await invoke('get_artist_details_cmd', { artistId: id });
+        return await invoke('get_artist_details_cmd', { artistId: id, proxy, doh, ipv4 });
       } catch (error) {
         console.error('getArtistDetails Error:', error);
       }
@@ -639,10 +693,11 @@ export class YouTubeExtractionService {
   }
 
   async getAlbumDetails(id: string): Promise<Album | null> {
+    const { proxy, doh, ipv4 } = this.getOptions();
     if (YouTubeExtractionService.isTauri()) {
       try {
         const { invoke } = await import('@tauri-apps/api/core');
-        return await invoke('get_album_details_cmd', { albumId: id });
+        return await invoke('get_album_details_cmd', { albumId: id, proxy, doh, ipv4 });
       } catch (error) {
         console.error('getAlbumDetails Error:', error);
       }
@@ -738,11 +793,12 @@ export class YouTubeExtractionService {
    * Resolves a YouTube URL to its metadata.
    */
   async getSongDetails(videoId: string): Promise<Song | null> {
+    const { proxy, doh, ipv4 } = this.getOptions();
     // ── Tauri (Desktop) ──────────────────────────────────────────────────────
     if (YouTubeExtractionService.isTauri()) {
       try {
         const { invoke } = await import('@tauri-apps/api/core');
-        const details: any = await invoke('get_song_details_cmd', { videoId });
+        const details: any = await invoke('get_song_details_cmd', { videoId, proxy, doh, ipv4 });
         return {
           ...details,
           sourceType: 'youtube',

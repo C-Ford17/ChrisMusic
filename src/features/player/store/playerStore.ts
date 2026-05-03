@@ -8,6 +8,7 @@ import { audioEngine } from '@/features/player/services/audioEngine';
 import { youtubeExtractionService, YouTubeExtractionService, ExoPlayerNative } from '@/features/player/services/youtubeExtractionService';
 import { db } from '@/core/db/db';
 import { toast } from 'sonner';
+import { useSettingsStore } from '@/features/settings/store/settingsStore';
 
 interface PlayerState {
   currentSong: Song | null;
@@ -291,7 +292,9 @@ export const usePlayerStore = create<PlayerState>()(
           await audioEngine.loadSong(updatedSong, startSeconds, get().isPlaying);
           
           // Background: Cache this song for future plays
-          offlineService.cacheSong(song);
+          if (useSettingsStore.getState().autoCache) {
+            offlineService.cacheSong(song);
+          }
           
           // Background: Prefetch next song
           get().prefetchNext();
@@ -362,7 +365,9 @@ export const usePlayerStore = create<PlayerState>()(
           await audioEngine.loadSong(updatedSong, startSeconds, get().isPlaying);
           
           // Background: Cache this song
-          offlineService.cacheSong(song);
+          if (useSettingsStore.getState().autoCache) {
+            offlineService.cacheSong(song);
+          }
           
           // Background: Prefetch next
           get().prefetchNext();

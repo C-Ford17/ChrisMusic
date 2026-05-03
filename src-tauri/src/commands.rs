@@ -6,7 +6,7 @@ use std::time::Duration;
 use tauri_plugin_shell::ShellExt;
 use std::sync::Mutex;
 use std::sync::OnceLock;
-use log::{info, error};
+use log::{info, error, warn};
 use std::path::PathBuf;
 
 fn get_cookies_path(app: &tauri::AppHandle) -> Option<String> {
@@ -104,14 +104,15 @@ pub struct ArtistDetails {
 }
 
 #[tauri::command]
-pub async fn get_song_details_cmd(video_id: String) -> Result<SearchResult, String> {
-    println!("CHRIS_LOG: get_song_details_cmd for {}", video_id);
+pub async fn get_song_details_cmd(video_id: String, proxy: Option<String>, doh: Option<String>, ipv4: Option<bool>) -> Result<SearchResult, String> {
+    let _ = doh;
+    println!("CHRIS_LOG: get_song_details_cmd for {} (ipv4: {:?})", video_id, ipv4);
     let body = serde_json::json!({
         "context": get_innertube_context(),
         "videoId": video_id
     });
 
-    if let Ok(data) = innertube_request("next", body).await {
+    if let Ok(data) = innertube_request("next", body, proxy, ipv4).await {
         let mut panel = &data["contents"]["singleColumnMusicWatchNextResultsRenderer"]["tabbedRenderer"]["watchNextTabRenderer"]["content"]["musicQueueRenderer"]["content"]["playlistPanelRenderer"];
         
         // Try alternate path for certain videos/regions
@@ -231,7 +232,16 @@ fn set_last_instance_index(index: usize) {
 }
 
 #[tauri::command]
-pub async fn search_youtube_native_cmd(app: tauri::AppHandle, query: String, count: Option<u32>, filter: Option<String>, continuation: Option<String>) -> Result<SearchResponse, String> {
+pub async fn search_youtube_native_cmd(
+    app: tauri::AppHandle, 
+    query: String, 
+    count: Option<u32>, 
+    filter: Option<String>, 
+    continuation: Option<String>,
+    proxy: Option<String>,
+    doh: Option<String>,
+    ipv4: Option<bool>
+) -> Result<SearchResponse, String> {
     #[cfg(mobile)]
     let _ = app;
     let limit = count.unwrap_or(15);
@@ -259,9 +269,9 @@ pub async fn search_youtube_native_cmd(app: tauri::AppHandle, query: String, cou
         }
     };
 
-    println!("CHRIS_LOG: InnerTube search filter_val={} with params", filter_val);
+    println!("CHRIS_LOG: InnerTube search filter_val={} with params (ipv4: {:?})", filter_val, ipv4);
 
-    if let Ok(data) = innertube_request("search", body).await {
+    if let Ok(data) = innertube_request("search", body, proxy.clone(), ipv4).await {
         let mut results = Vec::new();
         // Filtered searches use tabbedSearchResultsRenderer; continuations use a flat structure
         let root = if data["contents"]["tabbedSearchResultsRenderer"].is_object() {
@@ -469,6 +479,25 @@ pub async fn search_youtube_native_cmd(app: tauri::AppHandle, query: String, cou
             let client = clients[i];
             let client_arg = format!("youtube:player_client={}", client);
             let mut args = vec!["--dump-json", "--flat-playlist", "--extractor-args", &client_arg, &search_query];
+            
+            let proxy_val;
+            if let Some(ref p) = proxy {
+                if !p.is_empty() {
+                    proxy_val = p.clone();
+                    args.insert(0, "--proxy");
+                    args.insert(1, &proxy_val);
+                }
+            }
+
+            let doh_val;
+            if let Some(ref d) = doh {
+                if !d.is_empty() {
+                    doh_val = d.clone();
+                    args.insert(0, "--dns-over-https");
+                    args.insert(1, &doh_val);
+                }
+            }
+
             let cookies_val;
             if let Some(ref path) = cookies {
                 cookies_val = path.clone();
@@ -517,11 +546,22 @@ pub async fn search_youtube_native_cmd(app: tauri::AppHandle, query: String, cou
 }
 
 // --- INNERTUBE UTILS ---
-async fn innertube_request(endpoint: &str, body: serde_json::Value) -> Result<serde_json::Value, String> {
-    let client = reqwest::Client::builder()
+async fn innertube_request(endpoint: &str, body: serde_json::Value, proxy: Option<String>, ipv4: Option<bool>) -> Result<serde_json::Value, String> {
+    let mut builder = reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-        .build()
-        .map_err(|e| e.to_string())?;
+        .timeout(Duration::from_secs(15));
+
+    if let Some(true) = ipv4 {
+        builder = builder.ip_strategy(reqwest::dns::IpStrategy::Ipv4Only);
+    }
+
+    if let Some(p_url) = proxy {
+        if !p_url.is_empty() {
+            builder = builder.proxy(reqwest::Proxy::all(p_url).map_err(|e| e.to_string())?);
+        }
+    }
+
+    let client = builder.build().map_err(|e| e.to_string())?;
 
     let url = format!("https://music.youtube.com/youtubei/v1/{}", endpoint);
     let res = client.post(&url)
@@ -550,8 +590,9 @@ fn get_innertube_context() -> serde_json::Value {
 }
 
 #[tauri::command]
-pub async fn get_artist_details_cmd(app: tauri::AppHandle, artist_id: String) -> Result<ArtistDetails, String> {
-    println!("CHRIS_LOG: get_artist_details_cmd for {}", artist_id);
+pub async fn get_artist_details_cmd(app: tauri::AppHandle, artist_id: String, proxy: Option<String>, doh: Option<String>, ipv4: Option<bool>) -> Result<ArtistDetails, String> {
+    let _ = doh;
+    println!("CHRIS_LOG: get_artist_details_cmd for {} (ipv4: {:?})", artist_id, ipv4);
     let _ = app;
 
     let body = serde_json::json!({
@@ -567,7 +608,7 @@ pub async fn get_artist_details_cmd(app: tauri::AppHandle, artist_id: String) ->
     let mut singles: Vec<SearchResult> = Vec::new();
     let mut playlists: Vec<SearchResult> = Vec::new();
 
-    if let Ok(data) = innertube_request("browse", body).await {
+    if let Ok(data) = innertube_request("browse", body, proxy, ipv4).await {
         // --- HEADER ---
         let header = data["header"]["musicImmersiveHeaderRenderer"].as_object()
             .or_else(|| data["header"]["musicVisualHeaderRenderer"].as_object());
@@ -686,13 +727,14 @@ pub async fn get_artist_details_cmd(app: tauri::AppHandle, artist_id: String) ->
 }
 
 #[tauri::command]
-pub async fn get_album_details_cmd(app: tauri::AppHandle, album_id: String) -> Result<AlbumDetails, String> {
-    println!("CHRIS_LOG: get_album_details_cmd for {}", album_id);
+pub async fn get_album_details_cmd(app: tauri::AppHandle, album_id: String, proxy: Option<String>, doh: Option<String>, ipv4: Option<bool>) -> Result<AlbumDetails, String> {
+    let _ = doh;
+    println!("CHRIS_LOG: get_album_details_cmd for {} (ipv4: {:?})", album_id, ipv4);
     let _ = app;
 
     let body = serde_json::json!({ "context": get_innertube_context(), "browseId": album_id });
 
-    if let Ok(data) = innertube_request("browse", body).await {
+    if let Ok(data) = innertube_request("browse", body, proxy, ipv4).await {
         let mut title = "Unknown Album".to_string();
         let mut artist = "Unknown Artist".to_string();
         let mut thumb = "".to_string();
@@ -823,7 +865,15 @@ pub async fn get_album_details_cmd(app: tauri::AppHandle, album_id: String) -> R
 
 
 #[tauri::command]
-pub async fn get_streaming_url(app: tauri::AppHandle, video_id: String) -> Result<String, String> {
+pub async fn get_streaming_url(
+    app: tauri::AppHandle, 
+    video_id: String,
+    quality: Option<String>,
+    proxy: Option<String>,
+    doh: Option<String>,
+    ipv4: Option<bool>
+) -> Result<String, String> {
+    let mut last_error = "Could not extract stream URL.".to_string();
     #[cfg(mobile)]
     let _ = app;
 
@@ -842,19 +892,52 @@ pub async fn get_streaming_url(app: tauri::AppHandle, video_id: String) -> Resul
             let client = clients[i];
             let client_arg = format!("youtube:player_client={}", client);
             let video_url = format!("https://www.youtube.com/watch?v={}", video_id);
-            let mut args = vec!["-g", "-f", "bestaudio[ext=m4a]/bestaudio/best", "--extractor-args", &client_arg, &video_url];
+            let format_selector = match quality.as_deref().unwrap_or("high") {
+                "low" => "bestaudio[abr<=64]/worstaudio/worst",
+                "normal" => "bestaudio[abr<=128]/bestaudio/best",
+                _ => "bestaudio[ext=m4a]/bestaudio/best"
+            };
 
-            let cookies_val;
-            if let Some(ref path) = cookies {
-                cookies_val = path.clone();
-                args.insert(0, "--cookies");
-                args.insert(1, &cookies_val);
+            let mut args = vec![
+                "--no-check-certificate".to_string(),
+                "-g".to_string(), 
+                "-f".to_string(), format_selector.to_string(), 
+                "--extractor-args".to_string(), client_arg
+            ];
+
+            if let Some(true) = ipv4 {
+                args.insert(0, "-4".to_string());
             }
 
-            if let Ok(output) = app.shell().sidecar("yt-dlp").map_err(|e| e.to_string())?.args(&args).output().await {
-                if output.status.success() {
-                    set_last_client_index(i);
-                    return Ok(String::from_utf8(output.stdout).map_err(|e| e.to_string())?.trim().to_string());
+            if let Some(ref p) = proxy {
+                if !p.is_empty() {
+                    args.push("--proxy".to_string());
+                    args.push(p.clone());
+                }
+            }
+
+            if let Some(ref path) = cookies {
+                args.push("--cookies".to_string());
+                args.push(path.clone());
+            }
+            
+            args.push(video_url);
+
+            let sidecar_result = app.shell().sidecar("yt-dlp");
+            if let Ok(sidecar) = sidecar_result {
+                let output = sidecar.args(&args).output().await;
+
+                if let Ok(out) = output {
+                    if out.status.success() {
+                        set_last_client_index(i);
+                        return Ok(String::from_utf8(out.stdout).map_err(|e| e.to_string())?.trim().to_string());
+                    } else {
+                        let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+                        error!("CHRIS_LOG: yt-dlp failed for client {}: {}", client, stderr);
+                        last_error = format!("yt-dlp error ({}): {}", client, stderr);
+                    }
+                } else {
+                    last_error = "Failed to execute yt-dlp sidecar output".to_string();
                 }
             }
         }
@@ -862,7 +945,16 @@ pub async fn get_streaming_url(app: tauri::AppHandle, video_id: String) -> Resul
 
     // Fallback Invidious
     let instances = ["https://yewtu.be", "https://iv.melmac.space", "https://inv.tux.digital", "https://iv.ggtyler.dev"];
-    let client = reqwest::Client::builder().timeout(Duration::from_secs(10)).build().map_err(|e| e.to_string())?;
+    
+    if let Some(true) = ipv4 {
+        builder = builder.ip_strategy(reqwest::dns::IpStrategy::Ipv4Only);
+    }
+    if let Some(ref p) = proxy {
+        if !p.is_empty() {
+            builder = builder.proxy(reqwest::Proxy::all(p).map_err(|e| e.to_string())?);
+        }
+    }
+    let client = builder.build().map_err(|e| e.to_string())?;
 
     for instance in instances.iter() {
         let url = format!("{}/api/v1/videos/{}", instance, video_id);
@@ -878,11 +970,21 @@ pub async fn get_streaming_url(app: tauri::AppHandle, video_id: String) -> Resul
             }
         }
     }
-    Err("Could not extract stream URL.".to_string())
+    Err(last_error)
 }
 
 #[tauri::command]
-pub async fn download_to_disk(app: tauri::AppHandle, _video_id: String, _title: String, is_cache: Option<bool>) -> Result<String, String> {
+pub async fn download_to_disk(
+    app: tauri::AppHandle, 
+    _video_id: String, 
+    _title: String, 
+    is_cache: Option<bool>,
+    quality: Option<String>,
+    proxy: Option<String>,
+    doh: Option<String>,
+    ipv4: Option<bool>
+) -> Result<String, String> {
+    let _ = doh; // Unused in yt-dlp
     let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let folder = if is_cache.unwrap_or(false) { "cache" } else { "downloads" };
     let target_dir = app_dir.join(folder);
@@ -893,34 +995,71 @@ pub async fn download_to_disk(app: tauri::AppHandle, _video_id: String, _title: 
 
     #[cfg(desktop)]
     {
+        let mut last_error = "Download failed".to_string();
         let output_str = target_dir.join(format!("{}.%(ext)s", _video_id)).to_string_lossy().to_string();
         let cookies = get_cookies_path(&app);
         let clients = ["ios,android", "android_music,android", "tv_embedded,web_creator", "mweb", "web"];
 
         for client in clients {
+            let format_selector = match quality.as_deref().unwrap_or("high") {
+                "low" => "bestaudio[abr<=64]/worstaudio/worst",
+                "normal" => "bestaudio[abr<=128]/bestaudio/best",
+                _ => "bestaudio/best"
+            };
+
             let client_arg = format!("youtube:player_client={}", client);
             let video_url = format!("https://www.youtube.com/watch?v={}", _video_id);
-            let mut args = vec!["--js-runtimes", "node", "-f", "bestaudio/best", "--force-overwrites", "--no-continue", "--extractor-args", &client_arg, "-o", &output_str, &video_url];
-            if let Some(ref path) = cookies {
-                args.insert(0, "--cookies");
-                args.insert(1, path);
+            let mut args = vec![
+                "--no-check-certificate".to_string(),
+                "--js-runtimes".to_string(), "node".to_string(), 
+                "-f".to_string(), format_selector.to_string(), 
+                "--force-overwrites".to_string(), 
+                "--no-continue".to_string(), 
+                "--extractor-args".to_string(), client_arg, 
+                "-o".to_string(), output_str.clone()
+            ];
+
+            if let Some(true) = ipv4 {
+                args.insert(0, "-4".to_string());
+            }
+            
+            if let Some(ref p) = proxy {
+                if !p.is_empty() {
+                    args.push("--proxy".to_string());
+                    args.push(p.clone());
+                }
             }
 
-            if let Ok(output) = app.shell().sidecar("yt-dlp").map_err(|e| e.to_string())?.args(&args).output().await {
-                if output.status.success() {
-                    if let Ok(entries) = fs::read_dir(&target_dir) {
-                        for entry in entries.flatten() {
-                            let path = entry.path();
-                            if let Some(name) = path.file_name() {
-                                if name.to_string_lossy().starts_with(&_video_id) && !name.to_string_lossy().ends_with(".part") {
-                                    return Ok(path.to_string_lossy().to_string());
+            if let Some(ref path) = cookies {
+                args.push("--cookies".to_string());
+                args.push(path.clone());
+            }
+
+            args.push(video_url);
+
+            if let Ok(sidecar) = app.shell().sidecar("yt-dlp") {
+                let output = sidecar.args(&args).output().await;
+
+                if let Ok(out) = output {
+                    if out.status.success() {
+                        if let Ok(entries) = fs::read_dir(&target_dir) {
+                            for entry in entries.flatten() {
+                                let path = entry.path();
+                                if let Some(name) = path.file_name() {
+                                    if name.to_string_lossy().starts_with(&_video_id) && !name.to_string_lossy().ends_with(".part") {
+                                        return Ok(path.to_string_lossy().to_string());
+                                    }
                                 }
                             }
                         }
+                    } else {
+                        let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+                        error!("CHRIS_LOG: Download yt-dlp failed for client {}: {}", client, stderr);
+                        last_error = format!("Download error ({}): {}", client, stderr);
                     }
                 }
             }
         }
-        Err("Download failed".to_string())
+        Err(last_error)
     }
 }

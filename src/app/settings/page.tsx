@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { LibraryService } from '@/features/library/services/libraryService';
-import { useSettingsStore, type AudioQuality, type ThemeMode } from '@/features/settings/store/settingsStore';
+import { useSettingsStore, type AudioQuality, type ThemeMode, type DoHProvider } from '@/features/settings/store/settingsStore';
 import { useTheme } from 'next-themes';
 import { toast } from 'sonner';
 import packageJson from '../../../package.json';
@@ -23,6 +23,10 @@ import { MaintenanceService } from '@/features/library/services/maintenanceServi
 import { offlineService } from '@/features/library/services/offlineService';
 import { youtubeExtractionService } from '@/features/player/services/youtubeExtractionService';
 import { useState, useEffect } from 'react';
+import { 
+  Globe, Server, Shield, Network,
+  Lock, Settings2, HelpCircle
+} from 'lucide-react';
 
 export default function SettingsPage() {
   const { 
@@ -30,7 +34,12 @@ export default function SettingsPage() {
     autoplay, setAutoplay, audioQuality, setAudioQuality,
     isForcedOffline, setForcedOffline,
     isDebugMode, setDebugMode,
-    accentColor, setAccentColor
+    accentColor, setAccentColor,
+    enableProxy, setEnableProxy, 
+    proxyType, setProxyType, proxyHost, setProxyHost, proxyPort, setProxyPort,
+    proxyUrl, setProxyUrl,
+    dohProvider, setDohProvider, customDohUrl, setCustomDohUrl,
+    autoCache, setAutoCache, forceIPv4, setForceIPv4
   } = useSettingsStore();
   const { theme, setTheme } = useTheme();
 
@@ -42,6 +51,7 @@ export default function SettingsPage() {
   const [isTauri, setIsTauri] = useState(false);
   const [isRepairing, setIsRepairing] = useState(false);
   const [repairProgress, setRepairProgress] = useState({ current: 0, total: 0, title: '' });
+  const [showDohModal, setShowDohModal] = useState(false);
 
   useEffect(() => {
     setIsTauri(typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__);
@@ -285,6 +295,162 @@ export default function SettingsPage() {
           </div>
         </section>
 
+        {/* Red y Conectividad */}
+        <section className="animate-in fade-in slide-in-from-bottom-6 duration-700">
+          <h2 className="text-xs font-black text-emerald-500 dark:text-emerald-400 uppercase tracking-[0.2em] mb-5 px-3 flex items-center gap-3">
+            <Globe size={16} /> Red y Conectividad
+          </h2>
+          <div className="bg-black/5 dark:bg-white/5 rounded-[32px] overflow-hidden border border-black/10 dark:border-white/10 shadow-sm transition-all space-y-px bg-black/10 dark:bg-white/5">
+            
+            {/* DNS over HTTPS */}
+            <div className="bg-white dark:bg-[#121212] p-8">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-5">
+                  <div className="p-4 bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 rounded-2xl">
+                    <Shield size={24} />
+                  </div>
+                  <div>
+                    <p className="font-black text-lg text-black/80 dark:text-white/90 tracking-tight">DNS mediante HTTPS</p>
+                    <p className="text-sm font-bold text-black/30 dark:text-white/40 mt-0.5">Evita bloqueos de red y censura</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {[
+                  { id: 'none', label: 'Ninguno' },
+                  { id: 'google', label: 'Google' },
+                  { id: 'cloudflare', label: 'Cloudflare' },
+                  { id: 'opendns', label: 'OpenDNS' },
+                  { id: 'adguard', label: 'AdGuard' },
+                  { id: 'custom', label: 'Personalizado' },
+                ].map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => setDohProvider(p.id as DoHProvider)}
+                    className={`py-3 px-4 rounded-xl text-[10px] font-black uppercase tracking-wider border transition-all ${
+                      dohProvider === p.id 
+                      ? 'bg-[var(--accent-primary)] text-white border-[var(--accent-primary)] shadow-lg' 
+                      : 'bg-black/5 dark:bg-white/5 border-transparent text-black/40 dark:text-white/40 hover:border-white/10'
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+
+              {dohProvider === 'custom' && (
+                <input
+                  type="text"
+                  value={customDohUrl}
+                  onChange={(e) => setCustomDohUrl(e.target.value)}
+                  placeholder="https://doh.ejemplo.com/dns-query"
+                  className="w-full mt-4 bg-black/5 dark:bg-black/40 border border-black/10 dark:border-white/10 rounded-xl p-4 text-[10px] font-mono text-black/80 dark:text-white/80 focus:ring-2 focus:ring-[var(--accent-primary)] outline-none"
+                />
+              )}
+            </div>
+
+            {/* Proxy */}
+            <div className="bg-white dark:bg-[#121212] p-8">
+              <div 
+                className="flex items-center justify-between cursor-pointer group mb-4"
+                onClick={() => setEnableProxy(!enableProxy)}
+              >
+                <div className="flex items-center gap-5">
+                  <div className="p-4 bg-purple-500/10 text-purple-500 dark:text-purple-400 rounded-2xl group-hover:scale-110 transition-transform">
+                    <Server size={24} />
+                  </div>
+                  <div>
+                    <p className="font-black text-lg text-black/80 dark:text-white/90 tracking-tight">Habilitar Proxy</p>
+                    <p className="text-sm font-bold text-black/30 dark:text-white/40 mt-0.5 text-[10px] uppercase tracking-widest">Necesario reiniciar la app</p>
+                  </div>
+                </div>
+                <div className={`w-14 h-7 rounded-full transition-all relative p-1 ${enableProxy ? 'bg-purple-500 shadow-inner' : 'bg-black/10 dark:bg-white/10'}`}>
+                  <div className={`w-5 h-5 bg-white rounded-full shadow-lg transition-all transform ${enableProxy ? 'translate-x-7' : 'translate-x-0'}`} />
+                </div>
+              </div>
+
+              {enableProxy && (
+                <div className="animate-in fade-in slide-in-from-top-2 duration-300 space-y-6">
+                   <div>
+                     <p className="text-[10px] font-black uppercase tracking-widest text-black/40 dark:text-white/40 mb-3 px-1">Modo proxy</p>
+                     <div className="grid grid-cols-3 gap-2">
+                       {(['http', 'socks4', 'socks5'] as const).map((type) => (
+                         <button
+                           key={type}
+                           onClick={() => setProxyType(type)}
+                           className={`py-3 px-4 rounded-xl text-[10px] font-black uppercase tracking-wider border transition-all ${
+                             proxyType === type 
+                             ? 'bg-purple-500 text-white border-purple-500 shadow-lg shadow-purple-500/20' 
+                             : 'bg-black/5 dark:bg-white/5 border-transparent text-black/40 dark:text-white/40 hover:border-white/10'
+                           }`}
+                         >
+                           {type}
+                         </button>
+                       ))}
+                     </div>
+                   </div>
+
+                   <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                     <div className="sm:col-span-3">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-black/40 dark:text-white/40 mb-2 px-1">Servidor proxy</p>
+                        <input
+                          type="text"
+                          value={proxyHost}
+                          onChange={(e) => setProxyHost(e.target.value)}
+                          placeholder="p. ej. 127.0.0.1"
+                          className="w-full bg-black/5 dark:bg-black/40 border border-black/10 dark:border-white/10 rounded-xl p-4 text-[10px] font-mono text-black/80 dark:text-white/80 focus:ring-2 focus:ring-purple-500 outline-none"
+                        />
+                     </div>
+                     <div className="sm:col-span-1">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-black/40 dark:text-white/40 mb-2 px-1">Puerto</p>
+                        <input
+                          type="text"
+                          value={proxyPort}
+                          onChange={(e) => setProxyPort(e.target.value)}
+                          placeholder="1080"
+                          className="w-full bg-black/5 dark:bg-black/40 border border-black/10 dark:border-white/10 rounded-xl p-4 text-[10px] font-mono text-black/80 dark:text-white/80 focus:ring-2 focus:ring-purple-500 outline-none"
+                        />
+                     </div>
+                   </div>
+
+                   <div>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-black/40 dark:text-white/40 mb-2 px-1">O usar URL completa (Legacy)</p>
+                      <input
+                        type="text"
+                        value={proxyUrl}
+                        onChange={(e) => setProxyUrl(e.target.value)}
+                        placeholder="http://usuario:pass@host:puerto"
+                        className="w-full bg-black/5 dark:bg-black/40 border border-black/10 dark:border-white/10 rounded-xl p-4 text-[10px] font-mono text-black/80 dark:text-white/80 focus:ring-2 focus:ring-purple-500 outline-none opacity-60"
+                      />
+                   </div>
+                </div>
+              )}
+            </div>
+
+            {/* Forzar IPv4 */}
+            <div className="bg-white dark:bg-[#121212] p-8 border-t border-black/5 dark:border-white/5">
+              <div 
+                className="flex items-center justify-between cursor-pointer group"
+                onClick={() => setForceIPv4(!forceIPv4)}
+              >
+                <div className="flex items-center gap-5">
+                  <div className="p-4 bg-orange-500/10 text-orange-500 dark:text-orange-400 rounded-2xl group-hover:scale-110 transition-transform">
+                    <Network size={24} />
+                  </div>
+                  <div>
+                    <p className="font-black text-lg text-black/80 dark:text-white/90 tracking-tight">Forzar IPv4</p>
+                    <p className="text-sm font-bold text-black/30 dark:text-white/40 mt-0.5">Mejora la conexión en redes restringidas</p>
+                  </div>
+                </div>
+                <div className={`w-14 h-7 rounded-full transition-all relative p-1 ${forceIPv4 ? 'bg-orange-500 shadow-inner' : 'bg-black/10 dark:bg-white/10'}`}>
+                  <div className={`w-5 h-5 bg-white rounded-full shadow-lg transition-all transform ${forceIPv4 ? 'translate-x-7' : 'translate-x-0'}`} />
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* Reproducción */}
         <section className="animate-in fade-in slide-in-from-bottom-6 duration-700">
           <h2 className="text-xs font-black text-blue-500 dark:text-blue-400 uppercase tracking-[0.2em] mb-5 px-3 flex items-center gap-3">
@@ -309,6 +475,24 @@ export default function SettingsPage() {
               </div>
             </div>
 
+            <div 
+              className="flex items-center justify-between p-8 hover:bg-white dark:hover:bg-white/2 transition-all cursor-pointer group border-t border-black/5 dark:border-white/5"
+              onClick={() => setAutoCache(!autoCache)}
+            >
+              <div className="flex items-center gap-5">
+                <div className="p-4 bg-purple-500/10 text-purple-500 dark:text-purple-400 rounded-2xl group-hover:scale-110 transition-transform">
+                  <DatabaseZap size={24} />
+                </div>
+                <div>
+                  <p className="font-black text-lg text-black/80 dark:text-white/90 tracking-tight">Auto Cache</p>
+                  <p className="text-sm font-bold text-black/30 dark:text-white/40 mt-0.5">Guardar automáticamente al escuchar</p>
+                </div>
+              </div>
+              <div className={`w-14 h-7 rounded-full transition-all relative p-1 ${autoCache ? 'bg-[var(--accent-primary)] shadow-inner shadow-black/20' : 'bg-black/10 dark:bg-white/10'}`}>
+                <div className={`w-5 h-5 bg-white rounded-full shadow-lg transition-all transform ${autoCache ? 'translate-x-7' : 'translate-x-0'}`} />
+              </div>
+            </div>
+
             <div className="p-8 border-t border-black/5 dark:border-white/5 space-y-6">
               <div className="flex items-center gap-5">
                 <div className="p-4 bg-indigo-500/10 text-indigo-500 dark:text-indigo-400 rounded-2xl">
@@ -316,7 +500,7 @@ export default function SettingsPage() {
                 </div>
                 <div>
                   <p className="font-black text-lg text-black/80 dark:text-white/90 tracking-tight">Calidad de Audio</p>
-                  <p className="text-sm font-bold text-black/30 dark:text-white/40 mt-0.5">Optimiza tu consumo de datos</p>
+                  <p className="text-sm font-bold text-black/30 dark:text-white/40 mt-0.5">Menor calidad = Carga más rápida y ahorro de datos</p>
                 </div>
               </div>
               <div className="flex gap-2 ml-0 sm:ml-16">
@@ -330,13 +514,19 @@ export default function SettingsPage() {
                       : 'bg-black/5 dark:bg-transparent border-black/5 dark:border-white/10 text-black/30 dark:text-white/40 hover:border-[var(--accent-primary)]/30'
                     }`}
                   >
-                    {q === 'low' ? 'Baja' : q === 'normal' ? 'Media' : 'Alta'}
+                    <div className="flex flex-col items-center gap-1">
+                      <span>{q === 'low' ? 'Baja' : q === 'normal' ? 'Media' : 'Alta'}</span>
+                      <span className="text-[7px] opacity-60">
+                        {q === 'low' ? '64kbps' : q === 'normal' ? '128kbps' : 'Bestaudio'}
+                      </span>
+                    </div>
                   </button>
                 ))}
               </div>
             </div>
           </div>
         </section>
+
 
         {/* Biblioteca y Datos */}
         <section className="animate-in fade-in slide-in-from-bottom-10 duration-1000">
@@ -568,7 +758,8 @@ export default function SettingsPage() {
             onClick={async () => {
               const diag = await youtubeExtractionService.getDiagnostics();
               console.log('NATIVE DIAGNOSTICS:', diag);
-              alert('Diagnóstico copiado a consola. Archivos encontrados: ' + (diag.no_backup_files?.length + diag.files_files?.length));
+              const totalFiles = (diag?.no_backup_files?.length || 0) + (diag?.files_files?.length || 0);
+              alert('Diagnóstico copiado a consola. Archivos encontrados: ' + totalFiles);
             }}
             className="w-full flex items-center justify-between p-8 hover:bg-white dark:hover:bg-white/2 transition-all text-left border-t border-black/5 dark:border-white/5 group"
           >

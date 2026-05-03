@@ -132,6 +132,11 @@ public class YouTubeNativePlugin extends Plugin {
     @PluginMethod
     public void getStreamUrl(PluginCall call) {
         String videoId = call.getString("videoId");
+        String quality = call.getString("quality", "high");
+        String proxy = call.getString("proxy", null);
+        String doh = call.getString("doh", null);
+        boolean ipv4 = call.getBoolean("ipv4", false);
+
         if (videoId == null) {
             call.reject("videoId is required");
             return;
@@ -147,8 +152,8 @@ public class YouTubeNativePlugin extends Plugin {
                 String url = null;
                 for (String client : clients) {
                     if (url != null && !url.isEmpty()) break;
-                    Log.d(TAG, "[Stream] Trying client: " + client);
-                    url = tryExtractUrl(videoId, client);
+                    Log.d(TAG, "[Stream] Trying client: " + client + " (Quality: " + quality + ", IPv4: " + ipv4 + ")");
+                    url = tryExtractUrl(videoId, client, quality, proxy, doh, ipv4);
                     if (url != null && !url.isEmpty()) {
                         saveBestClient(client);
                     }
@@ -173,15 +178,30 @@ public class YouTubeNativePlugin extends Plugin {
      * Handles multi-line output (DASH returns audio+video URLs on separate lines).
      * Returns null if extraction fails or returns no usable URL.
      */
-    private String tryExtractUrl(String videoId, String playerClient) {
+    private String tryExtractUrl(String videoId, String playerClient, String quality, String proxy, String doh, boolean ipv4) {
         try {
             YoutubeDLRequest request = new YoutubeDLRequest("https://www.youtube.com/watch?v=" + videoId);
-            // bestaudio/best — no ext filter, ExoPlayer (Media3) handles m4a, webm, opus natively
-            request.addOption("-f", "bestaudio/best");
+            
+            // Quality Mapping
+            String formatSort = "bestaudio/best";
+            if ("low".equals(quality)) {
+                formatSort = "bestaudio[abr<=64]/worstaudio/worst";
+            } else if ("normal".equals(quality)) {
+                formatSort = "bestaudio[abr<=128]/bestaudio/best";
+            }
+            
+            request.addOption("-f", formatSort);
             request.addOption("-g");
             request.addOption("--no-playlist");
             request.addOption("--no-check-certificate");
-            // Do NOT use --no-warnings: we want stderr in logcat for debugging
+            
+            if (ipv4) {
+                request.addOption("-4");
+            }
+            if (proxy != null && !proxy.isEmpty()) {
+                request.addOption("--proxy", proxy);
+            }
+
             request.addOption("--extractor-args", "youtube:player-client=" + playerClient);
             addCommonOptions(request);
 
@@ -216,6 +236,11 @@ public class YouTubeNativePlugin extends Plugin {
     @PluginMethod
     public void downloadToAdts(PluginCall call) {
         String videoId = call.getString("videoId");
+        String quality = call.getString("quality", "high");
+        String proxy = call.getString("proxy", null);
+        String doh = call.getString("doh", null);
+        boolean ipv4 = call.getBoolean("ipv4", false);
+
         if (videoId == null) {
             call.reject("videoId is required");
             return;
@@ -234,8 +259,8 @@ public class YouTubeNativePlugin extends Plugin {
                 boolean downloaded = false;
                 for (String client : clients) {
                     if (downloaded) break;
-                    Log.d(TAG, "[ADTS] Trying download client: " + client);
-                    downloaded = tryDownload(videoId, client, tempFile);
+                    Log.d(TAG, "[ADTS] Trying download client: " + client + " (IPv4: " + ipv4 + ")");
+                    downloaded = tryDownload(videoId, client, tempFile, quality, proxy, doh, ipv4);
                     if (downloaded) {
                         saveBestClient(client);
                     }
@@ -267,14 +292,30 @@ public class YouTubeNativePlugin extends Plugin {
         }).start();
     }
 
-    private boolean tryDownload(String videoId, String playerClient, File outputFile) {
+    private boolean tryDownload(String videoId, String playerClient, File outputFile, String quality, String proxy, String doh, boolean ipv4) {
         try {
             YoutubeDLRequest request = new YoutubeDLRequest("https://www.youtube.com/watch?v=" + videoId);
-            request.addOption("-f", "bestaudio/best");
+            
+            // Quality Mapping
+            String formatSort = "bestaudio/best";
+            if ("low".equals(quality)) {
+                formatSort = "bestaudio[abr<=64]/worstaudio/worst";
+            } else if ("normal".equals(quality)) {
+                formatSort = "bestaudio[abr<=128]/bestaudio/best";
+            }
+
+            request.addOption("-f", formatSort);
             request.addOption("-o", outputFile.getAbsolutePath());
             request.addOption("--no-playlist");
             request.addOption("--no-check-certificate");
-            // No --no-warnings: log stderr for debugging
+            
+            if (ipv4) {
+                request.addOption("-4");
+            }
+            if (proxy != null && !proxy.isEmpty()) {
+                request.addOption("--proxy", proxy);
+            }
+
             request.addOption("--extractor-args", "youtube:player-client=" + playerClient);
             addCommonOptions(request);
 
@@ -305,6 +346,10 @@ public class YouTubeNativePlugin extends Plugin {
     public void search(PluginCall call) {
         String query = call.getString("query");
         Integer count = call.getInt("count", 15);
+        String proxy = call.getString("proxy", null);
+        String doh = call.getString("doh", null);
+        boolean ipv4 = call.getBoolean("ipv4", false);
+
         if (query == null) {
             call.reject("query is required");
             return;
@@ -316,6 +361,14 @@ public class YouTubeNativePlugin extends Plugin {
             request.addOption("--dump-json");
             request.addOption("--flat-playlist");
             request.addOption("--no-playlist");
+            
+            if (ipv4) {
+                request.addOption("-4");
+            }
+            if (proxy != null && !proxy.isEmpty()) {
+                request.addOption("--proxy", proxy);
+            }
+
             addCommonOptions(request, UA_DESKTOP);
             
             Log.d(TAG, "[SEARCH] Searching for: " + query);

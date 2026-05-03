@@ -66,5 +66,9 @@ Contributions are welcome! Feel free to open issues or pull requests.
 
 ## 📄 License
 
-MIT License - © 2026 Christian. Built with ❤️ for the music community.
+This project is licensed under the **PolyForm Noncommercial License 1.0.0**. 
+
+**Note:** This is a **Source Available** license. You may use, modify, and distribute this software for personal and non-commercial purposes only. Commercial use is strictly prohibited. See the [LICENSE](LICENSE) and [NOTICE](NOTICE) files for full details.
+
+© 2026 Christian. Built with ❤️ for the music community.
 
