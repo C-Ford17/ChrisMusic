@@ -1179,36 +1179,28 @@ pub async fn get_spotify_playlist_details_cmd(
     // Spotify guarda la data en un script con id="initial-state" en formato base64 o JSON
     // O en un script de tipo application/ld+json
     
-    let document = scraper::Html::parse_document(&html);
-    
-    // Intentar buscar metadata básica (Título, Imagen) en etiquetas meta
-    let title_selector = scraper::Selector::parse("meta[property='og:title']").unwrap();
-    let image_selector = scraper::Selector::parse("meta[property='og:image']").unwrap();
-    
-    let title = document.select(&title_selector)
-        .next()
-        .and_then(|el| el.value().attr("content"))
-        .unwrap_or("Spotify Playlist")
-        .to_string();
+    let (title, image) = {
+        let document = scraper::Html::parse_document(&html);
         
-    let image = document.select(&image_selector)
-        .next()
-        .and_then(|el| el.value().attr("content"))
-        .unwrap_or("")
-        .to_string();
+        // Intentar buscar metadata básica (Título, Imagen) en etiquetas meta
+        let title_selector = scraper::Selector::parse("meta[property='og:title']").unwrap();
+        let image_selector = scraper::Selector::parse("meta[property='og:image']").unwrap();
+        
+        let title = document.select(&title_selector)
+            .next()
+            .and_then(|el| el.value().attr("content"))
+            .unwrap_or("Spotify Playlist")
+            .to_string();
+            
+        let image = document.select(&image_selector)
+            .next()
+            .and_then(|el| el.value().attr("content"))
+            .unwrap_or("")
+            .to_string();
+        (title, image)
+    };
 
-    // Para las canciones, Spotify suele tener un script con la info
-    // Intentemos buscar el script que contiene la lista de canciones
-    let script_selector = scraper::Selector::parse("script").unwrap();
     let mut songs = Vec::new();
-
-    for script in document.select(&script_selector) {
-        let content = script.inner_html();
-        if content.contains("Spotify.Entity") || content.contains("tracks") {
-            // Aquí hay lógica compleja para parsear el JSON de Spotify
-            // Por ahora, busquemos patrones de nombres de canciones si el JSON es visible
-        }
-    }
 
     // Alternativa: Si no podemos parsear el JSON complejo, podemos usar la API de Embed 
     // que es mucho más limpia y pública.
