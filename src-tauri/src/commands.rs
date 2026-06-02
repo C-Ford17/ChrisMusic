@@ -6,7 +6,7 @@ use std::time::Duration;
 use tauri_plugin_shell::ShellExt;
 use std::sync::Mutex;
 use std::sync::OnceLock;
-use log::{info, error, warn};
+use log::{info, error};
 use std::path::PathBuf;
 
 fn get_cookies_path(app: &tauri::AppHandle) -> Option<String> {
@@ -552,7 +552,7 @@ async fn innertube_request(endpoint: &str, body: serde_json::Value, proxy: Optio
         .timeout(Duration::from_secs(15));
 
     if let Some(true) = ipv4 {
-        builder = builder.ip_strategy(reqwest::dns::IpStrategy::Ipv4Only);
+        // builder = builder.ip_strategy(reqwest::dns::IpStrategy::Ipv4Only);
     }
 
     if let Some(p_url) = proxy {
@@ -862,6 +862,101 @@ pub async fn get_album_details_cmd(app: tauri::AppHandle, album_id: String, prox
     Err("Failed to load album details".to_string())
 }
 
+#[tauri::command]
+pub async fn get_playlist_details_cmd(app: tauri::AppHandle, playlist_id: String, proxy: Option<String>, doh: Option<String>, ipv4: Option<bool>) -> Result<AlbumDetails, String> {
+    let _ = doh;
+    let _ = app;
+    println!("CHRIS_LOG: get_playlist_details_cmd for {} (ipv4: {:?})", playlist_id, ipv4);
+
+    // If it's a VL/PL ID, we use it as browseId
+    let browse_id = if playlist_id.starts_with("PL") || playlist_id.starts_with("RD") {
+        format!("VL{}", playlist_id)
+    } else {
+        playlist_id.clone()
+    };
+
+    let body = serde_json::json!({ "context": get_innertube_context(), "browseId": browse_id });
+
+    if let Ok(data) = innertube_request("browse", body, proxy, ipv4).await {
+        let mut title = "Unknown Playlist".to_string();
+        let mut artist = "Unknown Owner".to_string();
+        let mut thumb = "".to_string();
+
+        // 1. Try to find header (similar to album but paths vary)
+        let header = &data["header"]["musicDetailHeaderRenderer"];
+        if !header.is_null() {
+            title = header["title"]["runs"][0]["text"].as_str().unwrap_or(&title).to_string();
+            artist = header["subtitle"]["runs"][0]["text"].as_str().unwrap_or(&artist).to_string();
+            thumb = header["thumbnail"]["musicThumbnailRenderer"]["thumbnail"]["thumbnails"]
+                .as_array().and_then(|t| t.last()).and_then(|t| t["url"].as_str()).unwrap_or_default().to_string();
+        } else {
+            // Try microformat fallback
+            if let Some(mf_title) = data["microformat"]["microformatDataRenderer"]["title"].as_str() {
+                title = mf_title.to_string();
+            }
+            if let Some(owner) = data["microformat"]["microformatDataRenderer"]["pageOwnerDetails"]["name"].as_str() {
+                artist = owner.to_string();
+            }
+        }
+
+        // 2. Extract songs
+        let mut songs = Vec::new();
+        let contents = &data["contents"]["singleColumnBrowseResultsRenderer"]["tabs"][0]["tabRenderer"]["content"]["sectionListRenderer"]["contents"][0]["musicPlaylistShelfRenderer"]["contents"];
+        
+        let target_contents = if contents.is_array() {
+            contents
+        } else {
+            // Alternative path
+            &data["contents"]["twoColumnBrowseResultsRenderer"]["secondaryContents"]["sectionListRenderer"]["contents"][0]["musicPlaylistShelfRenderer"]["contents"]
+        };
+
+        if let Some(items) = target_contents.as_array() {
+            for item in items {
+                let r = &item["musicResponsiveListItemRenderer"];
+                if r.is_null() { continue; }
+
+                let s_title = r["flexColumns"][0]["musicResponsiveListItemFlexColumnRenderer"]["text"]["runs"][0]["text"]
+                    .as_str().unwrap_or_default().to_string();
+                let video_id = r["playlistItemData"]["videoId"].as_str().unwrap_or_default().to_string();
+                
+                if !video_id.is_empty() && !s_title.is_empty() {
+                    let mut s_artist = artist.clone();
+                    // Try to get actual artist from byline
+                    if let Some(runs) = r["flexColumns"][1]["musicResponsiveListItemFlexColumnRenderer"]["text"]["runs"].as_array() {
+                        if let Some(t) = runs[0]["text"].as_str() {
+                            s_artist = t.to_string();
+                        }
+                    }
+
+                    let item_thumb = r["thumbnail"]["musicThumbnailRenderer"]["thumbnail"]["thumbnails"]
+                        .as_array().and_then(|t| t.last()).and_then(|t| t["url"].as_str()).unwrap_or(&thumb).to_string();
+
+                    songs.push(SearchResult {
+                        id: video_id.clone(),
+                        title: s_title,
+                        artist_name: s_artist,
+                        thumbnail_url: item_thumb,
+                        source_type: "youtube".to_string(),
+                        result_type: "song".to_string(),
+                        name: None,
+                        is_explicit: None,
+                        duration_text: None,
+                        view_count_text: None,
+                        view_count: None,
+                        raw_info: None,
+                    });
+                }
+            }
+        }
+
+        if !songs.is_empty() || title != "Unknown Playlist" {
+            return Ok(AlbumDetails { id: playlist_id, title, artist_name: artist, thumbnail_url: thumb, songs });
+        }
+    }
+
+    Err("Failed to load playlist details".to_string())
+}
+
 
 
 #[tauri::command]
@@ -946,8 +1041,11 @@ pub async fn get_streaming_url(
     // Fallback Invidious
     let instances = ["https://yewtu.be", "https://iv.melmac.space", "https://inv.tux.digital", "https://iv.ggtyler.dev"];
     
+    let mut builder = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10));
+
     if let Some(true) = ipv4 {
-        builder = builder.ip_strategy(reqwest::dns::IpStrategy::Ipv4Only);
+        // builder = builder.ip_strategy(reqwest::dns::IpStrategy::Ipv4Only);
     }
     if let Some(ref p) = proxy {
         if !p.is_empty() {
@@ -955,6 +1053,7 @@ pub async fn get_streaming_url(
         }
     }
     let client = builder.build().map_err(|e| e.to_string())?;
+
 
     for instance in instances.iter() {
         let url = format!("{}/api/v1/videos/{}", instance, video_id);
@@ -1062,4 +1161,95 @@ pub async fn download_to_disk(
         }
         Err(last_error)
     }
+}
+
+#[tauri::command]
+pub async fn get_spotify_playlist_details_cmd(
+    playlist_id: String,
+) -> Result<serde_json::Value, String> {
+    let url = format!("https://open.spotify.com/playlist/{}", playlist_id);
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let response = client.get(&url).send().await.map_err(|e| e.to_string())?;
+    let html = response.text().await.map_err(|e| e.to_string())?;
+
+    // Spotify guarda la data en un script con id="initial-state" en formato base64 o JSON
+    // O en un script de tipo application/ld+json
+    
+    let document = scraper::Html::parse_document(&html);
+    
+    // Intentar buscar metadata básica (Título, Imagen) en etiquetas meta
+    let title_selector = scraper::Selector::parse("meta[property='og:title']").unwrap();
+    let image_selector = scraper::Selector::parse("meta[property='og:image']").unwrap();
+    
+    let title = document.select(&title_selector)
+        .next()
+        .and_then(|el| el.value().attr("content"))
+        .unwrap_or("Spotify Playlist")
+        .to_string();
+        
+    let image = document.select(&image_selector)
+        .next()
+        .and_then(|el| el.value().attr("content"))
+        .unwrap_or("")
+        .to_string();
+
+    // Para las canciones, Spotify suele tener un script con la info
+    // Intentemos buscar el script que contiene la lista de canciones
+    let script_selector = scraper::Selector::parse("script").unwrap();
+    let mut songs = Vec::new();
+
+    for script in document.select(&script_selector) {
+        let content = script.inner_html();
+        if content.contains("Spotify.Entity") || content.contains("tracks") {
+            // Aquí hay lógica compleja para parsear el JSON de Spotify
+            // Por ahora, busquemos patrones de nombres de canciones si el JSON es visible
+        }
+    }
+
+    // Alternativa: Si no podemos parsear el JSON complejo, podemos usar la API de Embed 
+    // que es mucho más limpia y pública.
+    let embed_url = format!("https://open.spotify.com/embed/playlist/{}", playlist_id);
+    let embed_res = client.get(&embed_url).send().await.map_err(|e| e.to_string())?;
+    let embed_html = embed_res.text().await.map_err(|e| e.to_string())?;
+    
+    // El embed tiene un script id="resource" con JSON
+    if let Some(start) = embed_html.find("id=\"resource\"") {
+        if let Some(json_start) = embed_html[start..].find('>') {
+            let actual_start = start + json_start + 1;
+            if let Some(json_end) = embed_html[actual_start..].find("</script>") {
+                let json_str = &embed_html[actual_start..actual_start + json_end];
+                if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(json_str) {
+                    // Extraer canciones del formato de Embed
+                    if let Some(tracks) = json_val.get("tracks").and_then(|t| t.get("items")) {
+                        for item in tracks.as_array().unwrap_or(&vec![]) {
+                            let track = item.get("track").or(Some(item)).unwrap();
+                            let name = track.get("name").and_then(|n| n.as_str()).unwrap_or("Unknown");
+                            let artists = track.get("artists").and_then(|a| a.as_array()).map(|arr| {
+                                arr.iter()
+                                   .filter_map(|art| art.get("name").and_then(|n| n.as_str()))
+                                   .collect::<Vec<_>>()
+                                   .join(", ")
+                            }).unwrap_or_default();
+                            
+                            songs.push(serde_json::json!({
+                                "title": name,
+                                "artist": artists,
+                                "duration": track.get("duration_ms").and_then(|d| d.as_u64()).unwrap_or(0) / 1000,
+                            }));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(serde_json::json!({
+        "title": title,
+        "image": image,
+        "songs": songs
+    }))
 }

@@ -39,6 +39,8 @@
         "allow-test-ytdlp",
         "allow-get-artist-details-cmd",
         "allow-get-album-details-cmd",
+        "allow-get-playlist-details-cmd",
+        "allow-get-spotify-playlist-details-cmd",
         "allow-get-song-details-cmd"
     ]
 }

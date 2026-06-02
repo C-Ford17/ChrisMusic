@@ -78,6 +78,8 @@ class AudioEngine {
       this.htmlPlayer.addEventListener('playing', () => this.emit(STATE.PLAYING));
       this.htmlPlayer.addEventListener('timeupdate', () => this.emit(this.getPlayerState()));
     }
+
+    this.initTauriTaskbar();
   }
 
   public static getInstance(): AudioEngine {
@@ -228,6 +230,7 @@ class AudioEngine {
 
   private emit(state: number) {
     if (this.onStateChange) this.onStateChange(state);
+    this.syncTauriTaskbar(state === STATE.PLAYING);
   }
 
   public setOnStateChange(callback: StateCallback) {
@@ -807,6 +810,44 @@ class AudioEngine {
     }
     
     return 'unknown';
+  }
+
+  private async initTauriTaskbar() {
+    if (typeof window === 'undefined') return;
+    const isTauri = (window as any).__TAURI_INTERNALS__ !== undefined;
+    if (!isTauri) return;
+
+    try {
+      const { listen } = await import('@tauri-apps/api/event');
+      listen('taskbar-command', (event) => {
+        const cmd = event.payload as string;
+        console.log('[AudioEngine] Taskbar command:', cmd);
+        if (cmd === 'play_pause') {
+          if (this.getPlayerState() === STATE.PLAYING) {
+            this.pause();
+          } else {
+            this.play();
+          }
+        } else if (cmd === 'next') {
+          if (this.mediaSessionActions?.onNext) this.mediaSessionActions.onNext();
+        } else if (cmd === 'prev') {
+          if (this.mediaSessionActions?.onPrevious) this.mediaSessionActions.onPrevious();
+        }
+      });
+    } catch (e) {
+      console.error('[AudioEngine] Taskbar init error:', e);
+    }
+  }
+
+  private async syncTauriTaskbar(isPlaying: boolean) {
+    if (typeof window === 'undefined') return;
+    const isTauri = (window as any).__TAURI_INTERNALS__ !== undefined;
+    if (!isTauri) return;
+
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      invoke('update_taskbar_state', { isPlaying });
+    } catch (e) { }
   }
 }
 

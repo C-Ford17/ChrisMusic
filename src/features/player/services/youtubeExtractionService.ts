@@ -769,7 +769,10 @@ export class YouTubeExtractionService {
         const response = await CapacitorHttp.request({
           method: 'POST',
           url,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+          },
           data: fullBody
         });
         return response.data;
@@ -845,6 +848,32 @@ export class YouTubeExtractionService {
         resultType: 'song'
       } as any;
     }
+  }
+
+  async getPlaylistDetails(id: string): Promise<Album | null> {
+    const { proxy, doh, ipv4 } = this.getOptions();
+    if (YouTubeExtractionService.isTauri()) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        return await invoke('get_playlist_details_cmd', { playlistId: id, proxy, doh, ipv4 });
+      } catch (error) {
+        console.error('getPlaylistDetails Error:', error);
+      }
+    }
+    // Android / Web — InnerTube browse (Fallback)
+    return this.getAlbumDetails(id); 
+  }
+
+  async getSpotifyPlaylistDetails(id: string): Promise<any | null> {
+    if (YouTubeExtractionService.isTauri()) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        return await invoke('get_spotify_playlist_details_cmd', { playlistId: id });
+      } catch (error) {
+        console.error('getSpotifyPlaylistDetails Error:', error);
+      }
+    }
+    return null;
   }
 
   /**

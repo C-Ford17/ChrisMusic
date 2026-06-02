@@ -13,13 +13,16 @@ import { offlineService } from '@/features/library/services/offlineService';
 import { MarqueeText } from '@/shared/components/MarqueeText';
 import { SortableSongList } from '@/shared/components/SortableSongList';
 import { SongImage } from '@/shared/components/SongImage';
-import { YouTubeExtractionService } from '@/features/player/services/youtubeExtractionService';
+import { youtubeExtractionService } from '@/features/player/services/youtubeExtractionService';
 import { useRouter } from 'next/navigation';
 
 export default function LibraryPage() {
   const [activeTab, setActiveTab] = useState<'playlists' | 'favorites' | 'history' | 'offline' | 'artists' | 'albums'>('playlists');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
+  const [importUrl, setImportUrl] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   
   const { playSongInQueue, toggleDownload, downloadMultiple } = usePlayerStore();
@@ -152,6 +155,17 @@ export default function LibraryPage() {
               <Plus size={32} className="text-white" />
             </div>
             <span className="font-black text-[10px] uppercase tracking-widest text-black/50 dark:text-gray-400 group-hover:text-[var(--accent-primary)]">Nueva Mezcla</span>
+          </div>
+
+          {/* Import Playlist Button */}
+          <div 
+            onClick={() => setIsImportModalOpen(true)}
+            className="aspect-square bg-black/[0.02] dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:bg-green-500/5 hover:border-green-500/20 transition-all group shadow-sm hover:shadow-xl"
+          >
+            <div className="w-16 h-16 rounded-full bg-green-500 flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 group-hover:-rotate-12 transition-all">
+              <Download size={32} className="text-white" />
+            </div>
+            <span className="font-black text-[10px] uppercase tracking-widest text-black/50 dark:text-gray-400 group-hover:text-green-500">Importar</span>
           </div>
 
           {/* Liked Songs Tile */}
@@ -373,6 +387,126 @@ export default function LibraryPage() {
                 className="flex-1 py-4 rounded-xl font-black bg-[var(--accent-primary)] text-white hover:brightness-110 shadow-lg shadow-[var(--accent-primary)]/20 disabled:opacity-50 transition-all text-sm uppercase tracking-widest"
               >
                 Crear
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Playlist Modal */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 z-[110] bg-black/40 dark:bg-black/60 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#181818] border border-black/5 dark:border-white/10 p-8 rounded-[32px] w-full max-w-sm shadow-2xl relative transition-all">
+            <button 
+              onClick={() => {
+                if (!isImporting) setIsImportModalOpen(false);
+              }}
+              className="absolute top-6 right-6 p-2 bg-black/5 dark:bg-white/5 rounded-full text-black/40 dark:text-white/50 hover:text-red-500 transition-all"
+            >
+              <X size={20} />
+            </button>
+            
+            <h2 className="text-2xl font-black mb-2 text-black dark:text-white tracking-tight">Importar Lista</h2>
+            <p className="text-[10px] uppercase tracking-widest font-bold text-black/30 dark:text-white/20 mb-6">Pega un enlace de YouTube Music o Spotify</p>
+            
+            <input 
+              type="text" 
+              placeholder="https://music.youtube.com/... o https://open.spotify.com/playlist/..." 
+              className="w-full bg-black/5 dark:bg-black/50 border border-black/5 dark:border-white/10 rounded-xl px-4 py-4 text-black dark:text-white mb-8 focus:outline-none focus:ring-2 focus:ring-green-500/50 transition-all placeholder:text-black/20 dark:placeholder:text-white/20"
+              value={importUrl}
+              onChange={(e) => setImportUrl(e.target.value)}
+              disabled={isImporting}
+              autoFocus
+            />
+            
+            <div className="flex gap-4">
+              <button 
+                onClick={() => setIsImportModalOpen(false)}
+                disabled={isImporting}
+                className="flex-1 py-4 rounded-xl font-bold text-black/40 dark:text-white/50 hover:bg-black/5 dark:hover:bg-white/5 transition-all text-sm uppercase tracking-widest disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={async () => {
+                  if (!importUrl.trim()) return;
+                  setIsImporting(true);
+                  try {
+                    const url = importUrl.trim();
+                    let songsToImport: any[] = [];
+                    let playlistTitle = 'Lista Importada';
+
+                    if (url.includes('spotify.com')) {
+                      // Importar desde Spotify
+                      const match = url.match(/playlist\/([a-zA-Z0-9]+)/);
+                      if (!match) {
+                        alert('Enlace de Spotify no válido.');
+                        return;
+                      }
+                      const spotifyData = await youtubeExtractionService.getSpotifyPlaylistDetails(match[1]);
+                      if (!spotifyData || !spotifyData.songs.length) {
+                        alert('No se pudieron obtener canciones de Spotify.');
+                        return;
+                      }
+                      playlistTitle = spotifyData.title;
+                      
+                      // Para cada canción de Spotify, buscar en YouTube Music (Smart Matching)
+                      for (const s of spotifyData.songs) {
+                        const searchResults = await youtubeExtractionService.search(`${s.title} ${s.artist}`);
+                        if (searchResults && searchResults.length > 0) {
+                          songsToImport.push(searchResults[0]);
+                        }
+                      }
+                    } else {
+                      // Importar desde YouTube Music
+                      const resolved = youtubeExtractionService.resolveUrl(url);
+                      if (!resolved || resolved.type !== 'playlist') {
+                        alert('El enlace no parece ser una lista de reproducción válida.');
+                        return;
+                      }
+
+                      const details = await youtubeExtractionService.getPlaylistDetails(resolved.id);
+                      if (!details || !details.songs || !details.songs.length) {
+                        alert('No se pudieron obtener canciones de esta lista.');
+                        return;
+                      }
+                      playlistTitle = details.title || playlistTitle;
+                      songsToImport = details.songs;
+                    }
+
+                    if (songsToImport.length === 0) {
+                      alert('No se encontraron canciones para importar.');
+                      return;
+                    }
+
+                    // Create local playlist
+                    const playlistId = await LibraryService.createPlaylist(playlistTitle);
+                    
+                    // Add songs
+                    for (const song of songsToImport) {
+                      await LibraryService.addSongToPlaylist(playlistId, song as any);
+                    }
+
+                    setImportUrl('');
+                    setIsImportModalOpen(false);
+                  } catch (err) {
+                    console.error('Import failed:', err);
+                    alert('Error al importar la lista.');
+                  } finally {
+                    setIsImporting(false);
+                  }
+                }}
+                disabled={!importUrl.trim() || isImporting}
+                className="flex-1 py-4 rounded-xl font-black bg-green-500 text-white hover:brightness-110 shadow-lg shadow-green-500/20 disabled:opacity-50 transition-all text-sm uppercase tracking-widest flex items-center justify-center gap-2"
+              >
+                {isImporting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>Importando</span>
+                  </>
+                ) : (
+                  'Importar'
+                )}
               </button>
             </div>
           </div>

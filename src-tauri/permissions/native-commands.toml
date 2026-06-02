@@ -33,3 +33,15 @@ commands.allow = ["get_album_details_cmd"]
 identifier = "allow-get-song-details-cmd"
 description = "Allow getting song details"
 commands.allow = ["get_song_details_cmd"]
+[[permission]]
+identifier = "allow-get-playlist-details-cmd"
+description = "Allow getting playlist details"
+commands.allow = ["get_playlist_details_cmd"]
+[[permission]]
+identifier = "allow-update-taskbar-state"
+description = "Allow updating taskbar state"
+commands.allow = ["update_taskbar_state"]
+[[permission]]
+identifier = "allow-get-spotify-playlist-details-cmd"
+description = "Allow getting Spotify playlist details"
+commands.allow = ["get_spotify_playlist_details_cmd"]

@@ -1,11 +1,25 @@
+use tauri::Manager;
 mod commands;
+
+mod taskbar;
+
+#[tauri::command]
+fn update_taskbar_state(window: tauri::WebviewWindow, is_playing: bool) {
+  taskbar::update_play_state(&window, is_playing);
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_log::Builder::default().build())
-    .setup(|_app| {
+    .setup(|app| {
       println!("CHRIS_LOG: Rust setup() completed");
+      #[cfg(target_os = "windows")]
+      {
+        if let Some(window) = app.get_webview_window("main") {
+          taskbar::init(&window);
+        }
+      }
       Ok(())
     })
     .plugin(tauri_plugin_shell::init())
@@ -21,8 +35,12 @@ pub fn run() {
       commands::test_ytdlp,
       commands::get_artist_details_cmd,
       commands::get_album_details_cmd,
-      commands::get_song_details_cmd
+      commands::get_playlist_details_cmd,
+      commands::get_spotify_playlist_details_cmd,
+      commands::get_song_details_cmd,
+      update_taskbar_state
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }
+

@@ -11,7 +11,7 @@
   "android": {
     "version": "1.1.0",
     "url": "https://github.com/C-Ford17/ChrisMusic/releases/download/native-1.1.0/app-release.apk",
-    "web_version": "1.1.0",
-    "web_url": "https://github.com/C-Ford17/ChrisMusic/releases/download/1.1.0/dist.zip"
+    "web_version": "1.1.1",
+    "web_url": "https://github.com/C-Ford17/ChrisMusic/releases/download/1.1.1/dist.zip"
   }
 }
