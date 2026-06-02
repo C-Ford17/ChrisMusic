@@ -116,19 +116,19 @@ pub fn init<R: Runtime>(window: &WebviewWindow<R>) {
         
         buttons[0].iId = IDM_PREVIOUS as u32;
         buttons[0].dwMask = THB_ICON | THB_TOOLTIP | THB_FLAGS;
-        buttons[0].hIcon = load_system_icon("shell32.dll", 136); // Previous track icon
+        buttons[0].hIcon = load_system_icon("imageres.dll", 123); // Previous track icon
         buttons[0].szTip = string_to_u16_array("Anterior");
         buttons[0].dwFlags = THBF_ENABLED;
 
         buttons[1].iId = IDM_PLAYPAUSE as u32;
         buttons[1].dwMask = THB_ICON | THB_TOOLTIP | THB_FLAGS;
-        buttons[1].hIcon = load_system_icon("shell32.dll", 137); // Play icon
+        buttons[1].hIcon = load_system_icon("imageres.dll", 120); // Play icon
         buttons[1].szTip = string_to_u16_array("Reproducir");
         buttons[1].dwFlags = THBF_ENABLED;
 
         buttons[2].iId = IDM_NEXT as u32;
         buttons[2].dwMask = THB_ICON | THB_TOOLTIP | THB_FLAGS;
-        buttons[2].hIcon = load_system_icon("shell32.dll", 140); // Next track icon
+        buttons[2].hIcon = load_system_icon("imageres.dll", 124); // Next track icon
         buttons[2].szTip = string_to_u16_array("Siguiente");
         buttons[2].dwFlags = THBF_ENABLED;
 
@@ -161,10 +161,10 @@ pub fn update_play_state<R: Runtime>(window: &WebviewWindow<R>, is_playing: bool
         button.dwMask = THB_ICON | THB_TOOLTIP;
         
         if is_playing {
-            button.hIcon = load_system_icon("shell32.dll", 138); // Pause icon
+            button.hIcon = load_system_icon("imageres.dll", 121); // Pause icon
             button.szTip = string_to_u16_array("Pausar");
         } else {
-            button.hIcon = load_system_icon("shell32.dll", 137); // Play icon
+            button.hIcon = load_system_icon("imageres.dll", 120); // Play icon
             button.szTip = string_to_u16_array("Reproducir");
         }
 
